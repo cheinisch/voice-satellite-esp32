@@ -208,5 +208,7 @@ void VoiceProtocol::sendPing() {
 }
 
 void VoiceProtocol::sendJson(const String& json) {
-    if (connected_) ws_.sendTXT(json);
+    if (connected_) {
+        ws_.sendTXT(json.c_str(), json.length());
+    }
 }

@@ -32,5 +32,8 @@
 ## Unreleased
 
 ### Fixed
+- Use the `const char*` WebSocketsClient `sendTXT` overload so JSON messages compile with arduinoWebSockets 2.7.3 while keeping `sendJson(const String&)` const-correct.
+
+### Fixed
 - PlatformIO board isolation: the Generic ESP32-S3 build now ignores the Waveshare board library and the Waveshare build ignores the Generic board library.
 - Prevents the PlatformIO LDF from compiling Waveshare-only dependencies such as `AudioBoard.h` during the Generic target.
