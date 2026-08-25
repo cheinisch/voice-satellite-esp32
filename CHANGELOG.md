@@ -28,3 +28,9 @@
 - Manueller Workflow `Create firmware release` unterstützt `patch`, `minor`, `major` und eine explizite höhere SemVer-Version.
 - Der Release-Workflow aktualisiert `VERSION` und `BUILD`, baut vor dem Push, erstellt Release-Commit und Tag und veröffentlicht danach automatisch das GitHub Release.
 - Waveshare-Releases enthalten App-Binary, zusammengeführtes Factory-Binary, ZIP-Paket, Manifest und SHA-256-Prüfsummen.
+
+## Unreleased
+
+### Fixed
+- PlatformIO board isolation: the Generic ESP32-S3 build now ignores the Waveshare board library and the Waveshare build ignores the Generic board library.
+- Prevents the PlatformIO LDF from compiling Waveshare-only dependencies such as `AudioBoard.h` during the Generic target.
