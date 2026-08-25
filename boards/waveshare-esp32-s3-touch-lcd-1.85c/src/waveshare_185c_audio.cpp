@@ -9,10 +9,13 @@
 using namespace audio_driver;
 
 struct Waveshare185CAudio::Impl {
-    DriverDeviceInfo speakerPins;
-    DriverDeviceInfo micPins;
-    AudioDriverES8311Class speakerDriver{waveshare185c::ES8311_ADDR};
-    AudioDriverES7210Class micDriver{waveshare185c::ES7210_ADDR};
+    // arduino-audio-driver v0.2.0 uses DriverPins.
+    // ES8311 and ES7210 already provide the correct default 7-bit I2C
+    // addresses (0x18 and 0x40 respectively) in this driver version.
+    DriverPins speakerPins;
+    DriverPins micPins;
+    AudioDriverES8311Class speakerDriver;
+    AudioDriverES7210Class micDriver;
     AudioBoard speakerBoard{speakerDriver, speakerPins};
     AudioBoard micBoard{micDriver, micPins};
     I2SClass i2s{I2S_NUM_1};
@@ -28,7 +31,7 @@ bool Waveshare185CAudio::begin() {
 
     i.speakerPins.addI2C(PinFunction::CODEC,
                          waveshare185c::I2C_SCL, waveshare185c::I2C_SDA,
-                         waveshare185c::ES8311_ADDR, 400000, Wire);
+                         0, 400000, Wire);
     i.speakerPins.addI2S(PinFunction::CODEC,
                          waveshare185c::I2S_MCLK, waveshare185c::I2S_BCLK,
                          waveshare185c::I2S_LRCK, waveshare185c::I2S_DOUT, -1);
@@ -36,7 +39,7 @@ bool Waveshare185CAudio::begin() {
 
     i.micPins.addI2C(PinFunction::CODEC,
                      waveshare185c::I2C_SCL, waveshare185c::I2C_SDA,
-                     waveshare185c::ES7210_ADDR, 400000, Wire);
+                     0, 400000, Wire);
     i.micPins.addI2S(PinFunction::CODEC,
                      waveshare185c::I2S_MCLK, waveshare185c::I2S_BCLK,
                      waveshare185c::I2S_LRCK, -1, waveshare185c::I2S_DIN);

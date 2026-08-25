@@ -1,3 +1,8 @@
+## [Unreleased]
+
+### Fixed
+- Waveshare 1.85C audio driver updated for `arduino-audio-driver` v0.2.0 (`DriverPins` API, default ES8311/ES7210 constructors, correct I2C port argument).
+
 # Changelog
 
 ## 0.1.0 Build 4
