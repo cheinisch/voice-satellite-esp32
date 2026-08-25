@@ -101,3 +101,8 @@ permissions:
 ```
 
 Falls für den Default-Branch Branch Protection oder ein Ruleset aktiv ist, muss GitHub Actions die Release- und Buildnummer-Commits sowie das Erstellen von Tags durchführen dürfen.
+
+### Buildnummer bei Push
+
+Der Push-Workflow erhöht `BUILD` zunächst nur im Arbeitsverzeichnis und kompiliert anschließend beide Firmware-Targets. Erst wenn **beide Builds erfolgreich** sind, wird die neue Buildnummer committet und auf den Default-Branch gepusht. Ein fehlgeschlagener Compile verbraucht damit keine Buildnummer.
+

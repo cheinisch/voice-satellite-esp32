@@ -13,19 +13,19 @@ concurrency:
 jobs:
   increment-and-build:
     # Only real pushes to the default branch create numbered firmware builds.
-    # GITHUB_TOKEN pushes normally do not recursively trigger workflows; the
-    # actor guard is an additional safeguard for repositories with custom tokens.
+    # Commits created with GITHUB_TOKEN normally do not recursively trigger
+    # workflows; the actor guard is an additional safeguard.
     if: github.actor != 'github-actions[bot]' && github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout default branch
+      - name: Checkout pushed commit
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Increment BUILD
+      - name: Increment BUILD locally
         id: build
         shell: bash
         run: |
@@ -40,17 +40,7 @@ jobs:
           next=$((current + 1))
           printf '%s\n' "$next" > BUILD
           echo "number=$next" >> "$GITHUB_OUTPUT"
-          echo "Build number: $current -> $next"
-
-      - name: Commit BUILD
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add BUILD
-          git commit -m "chore: build ${{ steps.build.outputs.number }} [skip ci]"
-          git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          echo "Build number for validation: $current -> $next"
 
       - name: Setup Python
         uses: actions/setup-python@v6
@@ -65,3 +55,31 @@ jobs:
 
       - name: Build Waveshare ESP32-S3 Touch LCD 1.85C
         run: pio run -e waveshare-1_85c
+
+      - name: Verify branch has not moved
+        id: branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="${{ github.event.repository.default_branch }}"
+          git fetch origin "$branch"
+          remote_sha="$(git rev-parse "origin/$branch")"
+
+          if [[ "$remote_sha" != "${{ github.sha }}" ]]; then
+            echo "Default branch moved from ${{ github.sha }} to $remote_sha while this build was running."
+            echo "A newer push workflow will create the next build; skipping this BUILD commit."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit BUILD after successful firmware builds
+        if: steps.branch.outputs.current == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add BUILD
+          git commit -m "chore: build ${{ steps.build.outputs.number }} [skip ci]"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"

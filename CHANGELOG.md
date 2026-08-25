@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0 Build 4
+
+- Fix: gemeinsame Header unter `include/` werden beim Kompilieren der Board-Libraries explizit in den Include-Pfad aufgenommen.
+- Fix: der Push-Workflow committet `BUILD` erst, nachdem Generic- und Waveshare-Firmware erfolgreich gebaut wurden.
+- Fix: Branch-Race-Schutz verhindert einen veralteten Build-Commit, wenn während des Builds ein neuer Push eingeht.
+
 ## 0.1.0 - initial ESP32 repository
 
 - Neues eigenständiges Repository `jarvis-satellite-esp32`.
