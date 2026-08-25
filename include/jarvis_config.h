@@ -1,0 +1,92 @@
+#pragma once
+
+#if __has_include("local_config.h")
+#include "local_config.h"
+#endif
+
+#ifndef JARVIS_WIFI_SSID
+#define JARVIS_WIFI_SSID "CHANGE_ME"
+#endif
+#ifndef JARVIS_WIFI_PASSWORD
+#define JARVIS_WIFI_PASSWORD "CHANGE_ME"
+#endif
+
+#ifndef JARVIS_CORE_HOST
+#define JARVIS_CORE_HOST "172.16.2.30"
+#endif
+#ifndef JARVIS_CORE_PORT
+#define JARVIS_CORE_PORT 8081
+#endif
+#ifndef JARVIS_CORE_PATH
+#define JARVIS_CORE_PATH "/api/v1/voice/live"
+#endif
+#ifndef JARVIS_CORE_TLS
+#define JARVIS_CORE_TLS 0
+#endif
+
+#ifndef JARVIS_SATELLITE_ID
+#define JARVIS_SATELLITE_ID "satellite-esp32-01"
+#endif
+#ifndef JARVIS_SATELLITE_NAME
+#define JARVIS_SATELLITE_NAME "ESP32 Satellite"
+#endif
+
+#ifndef JARVIS_RECORD_MS
+#define JARVIS_RECORD_MS 8000
+#endif
+#ifndef JARVIS_AUDIO_RATE
+#define JARVIS_AUDIO_RATE 16000
+#endif
+#ifndef JARVIS_AUDIO_CHANNELS
+#define JARVIS_AUDIO_CHANNELS 1
+#endif
+#ifndef JARVIS_AUDIO_CHUNK_MS
+#define JARVIS_AUDIO_CHUNK_MS 20
+#endif
+
+#ifndef JARVIS_RECONNECT_MS
+#define JARVIS_RECONNECT_MS 3000
+#endif
+#ifndef JARVIS_WIFI_TIMEOUT_MS
+#define JARVIS_WIFI_TIMEOUT_MS 20000
+#endif
+
+#ifndef JARVIS_PROTOCOL_STRUCTURED
+#define JARVIS_PROTOCOL_STRUCTURED 1
+#endif
+
+// Generic ESP32-S3 defaults. Override in local_config.h if needed.
+#ifndef JARVIS_GENERIC_BUTTON_PIN
+#define JARVIS_GENERIC_BUTTON_PIN 0
+#endif
+#ifndef JARVIS_GENERIC_MIC_BCLK_PIN
+#define JARVIS_GENERIC_MIC_BCLK_PIN 4
+#endif
+#ifndef JARVIS_GENERIC_MIC_WS_PIN
+#define JARVIS_GENERIC_MIC_WS_PIN 5
+#endif
+#ifndef JARVIS_GENERIC_MIC_DATA_PIN
+#define JARVIS_GENERIC_MIC_DATA_PIN 6
+#endif
+#ifndef JARVIS_GENERIC_MIC_SHIFT
+#define JARVIS_GENERIC_MIC_SHIFT 14
+#endif
+#ifndef JARVIS_GENERIC_MIC_RIGHT_SLOT
+#define JARVIS_GENERIC_MIC_RIGHT_SLOT 0
+#endif
+#ifndef JARVIS_GENERIC_SPK_BCLK_PIN
+#define JARVIS_GENERIC_SPK_BCLK_PIN 15
+#endif
+#ifndef JARVIS_GENERIC_SPK_WS_PIN
+#define JARVIS_GENERIC_SPK_WS_PIN 16
+#endif
+#ifndef JARVIS_GENERIC_SPK_DATA_PIN
+#define JARVIS_GENERIC_SPK_DATA_PIN 17
+#endif
+
+#ifndef JARVIS_WAVESHARE_SPEAKER_VOLUME
+#define JARVIS_WAVESHARE_SPEAKER_VOLUME 70
+#endif
+#ifndef JARVIS_WAVESHARE_MIC_GAIN
+#define JARVIS_WAVESHARE_MIC_GAIN 70
+#endif

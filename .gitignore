@@ -1,0 +1,9 @@
+.pio/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+include/local_config.h
+*.log
+
+dist/

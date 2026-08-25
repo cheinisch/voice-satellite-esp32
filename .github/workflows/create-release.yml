@@ -1,0 +1,144 @@
+name: Create firmware release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version erhöhen'
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      custom_version:
+        description: 'Nur bei custom: explizite Version, z. B. 0.3.0'
+        required: false
+        default: ''
+        type: string
+      prerelease:
+        description: 'Als GitHub Prerelease veröffentlichen'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: firmware-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout default branch
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Prepare VERSION and BUILD
+        id: release
+        shell: bash
+        env:
+          VERSION_BUMP: ${{ inputs.version_bump }}
+          CUSTOM_VERSION: ${{ inputs.custom_version }}
+        run: |
+          set -euo pipefail
+          python scripts/prepare_release.py \
+            --bump "$VERSION_BUMP" \
+            --custom-version "$CUSTOM_VERSION" \
+            --write
+
+          version="$(tr -d '[:space:]' < VERSION)"
+          build="$(tr -d '[:space:]' < BUILD)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Preparing v$version Build $build"
+
+      - name: Ensure release tag does not exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.release.outputs.tag }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists." >&2
+            exit 1
+          fi
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install platformio esptool
+
+      - name: Build Generic firmware
+        run: pio run -e generic-esp32s3
+
+      - name: Build Waveshare firmware
+        run: pio run -e waveshare-1_85c
+
+      - name: Create Waveshare release package
+        run: python scripts/package_release.py --environment waveshare-1_85c --board waveshare-esp32-s3-touch-lcd-1.85c
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: waveshare-firmware-v${{ steps.release.outputs.version }}-build${{ steps.release.outputs.build }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Commit release version
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION BUILD
+          git commit -m "chore: release ${{ steps.release.outputs.tag }} build ${{ steps.release.outputs.build }} [skip ci]"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Create release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git tag -a "${{ steps.release.outputs.tag }}" -m "Release ${{ steps.release.outputs.tag }} Build ${{ steps.release.outputs.build }}"
+
+      - name: Push release commit and tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
+          git push origin "${{ steps.release.outputs.tag }}"
+
+      - name: Create GitHub Release and upload firmware
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            release create "${{ steps.release.outputs.tag }}"
+            dist/*
+            --verify-tag
+            --generate-notes
+            --title "${{ steps.release.outputs.tag }}"
+          )
+
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          fi
+
+          gh "${args[@]}"
