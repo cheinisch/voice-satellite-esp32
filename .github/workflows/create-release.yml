@@ -88,13 +88,22 @@ jobs:
       - name: Build Waveshare firmware
         run: pio run -e waveshare-1_85c
 
+      - name: Build FutureProofHomes Satellite1.1 firmware
+        run: pio run -e satellite1-1
+
+      - name: Prepare release directory
+        run: rm -rf dist && mkdir -p dist
+
       - name: Create Waveshare release package
         run: python scripts/package_release.py --environment waveshare-1_85c --board waveshare-esp32-s3-touch-lcd-1.85c
+
+      - name: Create Satellite1.1 release package
+        run: python scripts/package_release.py --environment satellite1-1 --board futureproofhomes-satellite1-1
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: waveshare-firmware-v${{ steps.release.outputs.version }}-build${{ steps.release.outputs.build }}
+          name: esp32-firmware-v${{ steps.release.outputs.version }}-build${{ steps.release.outputs.build }}
           path: dist/*
           if-no-files-found: error
 

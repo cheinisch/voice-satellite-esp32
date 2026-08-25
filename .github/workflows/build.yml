@@ -15,6 +15,7 @@ jobs:
         environment:
           - generic-esp32s3
           - waveshare-1_85c
+          - satellite1-1
 
     steps:
       - uses: actions/checkout@v6

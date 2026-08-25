@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create versioned Waveshare firmware assets for a GitHub Release."""
+"""Create versioned board firmware assets for a GitHub Release."""
 
 from __future__ import annotations
 
@@ -40,12 +40,6 @@ def main() -> int:
     build_dir = root / ".pio" / "build" / args.environment
     dist = root / "dist"
     dist.mkdir(exist_ok=True)
-
-    for old in dist.iterdir():
-        if old.is_file() or old.is_symlink():
-            old.unlink()
-        elif old.is_dir():
-            shutil.rmtree(old)
 
     required = {
         "bootloader.bin": build_dir / "bootloader.bin",
@@ -113,7 +107,7 @@ def main() -> int:
     )
 
     flashing_text = (
-        "Jarvis ESP32 Satellite - Waveshare firmware\n"
+        f"Jarvis ESP32 Satellite - {args.board} firmware\n"
         f"Version {version} Build {build}\n\n"
         "Factory image (new/fully erased board):\n"
         f"  esptool --chip esp32s3 write-flash 0x0 {merged.name}\n\n"
@@ -133,12 +127,16 @@ def main() -> int:
     shutil.copy2(app, dist / app.name)
     shutil.copy2(merged, dist / merged.name)
 
-    checksums = dist / "SHA256SUMS.txt"
+    checksums = dist / f"{stem}-SHA256SUMS.txt"
     downloadable = [dist / app.name, dist / merged.name, zip_path]
     checksums.write_text(
         "".join(f"{sha256(path)}  {path.name}\n" for path in downloadable),
         encoding="utf-8",
     )
+
+    # Only downloadable files should remain in dist/. The expanded directory is
+    # already contained in the ZIP and would otherwise be passed to gh release.
+    shutil.rmtree(package_dir)
 
     print(f"Created release package: {zip_path}")
     return 0

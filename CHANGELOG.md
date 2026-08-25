@@ -1,6 +1,10 @@
 # Changelog
 
 ## 0.1.0 Build 4
+- FutureProofHomes Satellite1.1 als drittes ESP32-S3-Boardprofil (`satellite1-1`) ergänzt.
+- XMOS SPI-Versionsprobe, Satellite1.1 48-kHz-I2S-Audiopfad und Action-Taste vorbereitet.
+- CI baut jetzt Generic, Waveshare und Satellite1.1.
+- Release-Workflow erzeugt zusätzlich Satellite1.1 Firmwarepakete.
 
 - Fix: gemeinsame Header unter `include/` werden beim Kompilieren der Board-Libraries explizit in den Include-Pfad aufgenommen.
 - Fix: der Push-Workflow committet `BUILD` erst, nachdem Generic- und Waveshare-Firmware erfolgreich gebaut wurden.

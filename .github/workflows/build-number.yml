@@ -56,6 +56,9 @@ jobs:
       - name: Build Waveshare ESP32-S3 Touch LCD 1.85C
         run: pio run -e waveshare-1_85c
 
+      - name: Build FutureProofHomes Satellite1.1
+        run: pio run -e satellite1-1
+
       - name: Verify branch has not moved
         id: branch
         shell: bash

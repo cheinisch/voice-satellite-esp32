@@ -43,6 +43,10 @@ Waveshare **ESP32-S3-Touch-LCD-1.85C V2 / Rev2.0**:
 
 Testprofil für ESP32-S3 + externes digitales I2S-Mikrofon + I2S-Verstärker.
 
+### `satellite1-1` – experimentell
+
+FutureProofHomes **Satellite1.1** mit ESP32-S3 N16R8 und XMOS XU316. Das Profil nutzt den offiziellen 48-kHz-I2S-Pfad und wandelt lokal auf das Jarvis-Format PCM16/16 kHz Mono. XMOS-Versionserkennung und die direkte Action-Taste sind integriert. TAS2780/Line-Out, LED-Ring und XMOS-Tasten werden auf echter Hardware noch weiter verifiziert. Siehe [`docs/satellite1-1.md`](docs/satellite1-1.md).
+
 ## Repository-Struktur
 
 ```text
@@ -54,7 +58,8 @@ jarvis-satellite-esp32/
 │   └── protocol/
 ├── boards/
 │   ├── generic-esp32s3/
-│   └── waveshare-esp32-s3-touch-lcd-1.85c/
+│   ├── waveshare-esp32-s3-touch-lcd-1.85c/
+│   └── futureproofhomes-satellite1-1/
 ├── docs/
 ├── scripts/
 ├── .github/workflows/
@@ -100,6 +105,12 @@ Generisch:
 
 ```bash
 pio run -e generic-esp32s3
+```
+
+Satellite1.1:
+
+```bash
+pio run -e satellite1-1
 ```
 
 ## Flashen
@@ -191,7 +202,7 @@ Das Hardwareprofil ist ausschließlich auf **V2 / Rev2.0** ausgelegt. Display- u
 
 Die Firmwareversion liegt in `VERSION`, die fortlaufende Buildnummer in `BUILD`. Beide Werte werden beim PlatformIO-Build automatisch in die Firmware übernommen. `include/build_info.h` enthält deshalb keine separat gepflegte Versionsnummer mehr.
 
-Bei einem normalen Push auf den Default-Branch erhöht `.github/workflows/build-number.yml` `BUILD`, commitet die neue Nummer zurück und baut Generic sowie Waveshare. Pull Requests kompilieren nur und verändern weder `VERSION` noch `BUILD`.
+Bei einem normalen Push auf den Default-Branch erhöht `.github/workflows/build-number.yml` `BUILD`, commitet die neue Nummer zurück und baut Generic, Waveshare sowie Satellite1.1. Pull Requests kompilieren nur und verändern weder `VERSION` noch `BUILD`.
 
 Releases werden über **Actions → Create firmware release → Run workflow** erzeugt. Dort wird `patch`, `minor`, `major` oder `custom` gewählt. Der Workflow erhöht automatisch `VERSION` und `BUILD`, baut die Firmware, erstellt den Release-Commit und den passenden Git-Tag und veröffentlicht anschließend das GitHub Release.
 
@@ -206,15 +217,15 @@ custom → frei angegebene höhere SemVer-Version
 
 Details: [`docs/versioning.md`](docs/versioning.md).
 
-## Automatische Waveshare-Releasepakete
+## Automatische Hardware-Releasepakete
 
-Der Workflow **Create firmware release** baut automatisch `waveshare-1_85c`. Das Release erhält anschließend:
+Der Workflow **Create firmware release** baut automatisch `waveshare-1_85c` und `satellite1-1`. Für beide Hardwareprofile werden versionierte Release-Assets erzeugt. Ein Paket enthält jeweils:
 
 ```text
 ...-app.bin       Applikations-Firmware
 ...-factory.bin   vollständiges Flash-Image ab 0x0
 ...zip            komplettes Waveshare-Paket
-SHA256SUMS.txt    Prüfsummen
+...-SHA256SUMS.txt    boardbezogene Prüfsummen
 ```
 
 Das ZIP enthält zusätzlich `bootloader.bin`, `partitions.bin`, `manifest.json` und Flash-Hinweise.
