@@ -15,6 +15,20 @@ const char* firstString(JsonDocument& doc, const char* a, const char* b) {
 
 void VoiceProtocol::begin(const Board& board) {
     board_ = &board;
+
+    // ESP32 clients can send an Authorization header during the HTTP WebSocket
+    // upgrade. Keep the token out of the protocol payload and out of logs.
+    if (strlen(JARVIS_CORE_TOKEN) > 0 && strcmp(JARVIS_CORE_TOKEN, "CHANGE_ME") != 0 && strcmp(JARVIS_CORE_TOKEN, "jv_DEIN_TOKEN") != 0) {
+        authorizationHeader_ = "Authorization: Bearer ";
+        authorizationHeader_ += JARVIS_CORE_TOKEN;
+        ws_.setExtraHeaders(authorizationHeader_.c_str());
+        Serial.println("Core-Authentifizierung: Bearer-Token konfiguriert");
+    } else {
+        authorizationHeader_ = "";
+        ws_.setExtraHeaders("");
+        Serial.println("WARNUNG: Kein Jarvis Core Token konfiguriert.");
+    }
+
 #if JARVIS_CORE_TLS
     ws_.beginSSL(JARVIS_CORE_HOST, JARVIS_CORE_PORT, JARVIS_CORE_PATH);
 #else
@@ -130,14 +144,25 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         return;
     }
 
-    if (!strcmp(type, "transcript") || !strcmp(type, "stt") || !strcmp(type, "user_text")) {
+    if (!strcmp(type, "session.started")) {
+        Serial.println("Voice Session gestartet.");
+        return;
+    }
+
+    if (!strcmp(type, "transcript.partial")) {
+        const String value = firstString(doc, "text", "transcript");
+        if (value.length()) Serial.printf("STT partial: %s\n", value.c_str());
+        return;
+    }
+
+    if (!strcmp(type, "transcript.final") || !strcmp(type, "transcript") || !strcmp(type, "stt") || !strcmp(type, "user_text")) {
         const String value = firstString(doc, "text", "transcript");
         Serial.printf("Du: %s\n", value.c_str());
         emit(VoiceEvent::Transcript, value);
         return;
     }
 
-    if (!strcmp(type, "assistant") || !strcmp(type, "assistant_text") || !strcmp(type, "response")) {
+    if (!strcmp(type, "assistant.final") || !strcmp(type, "assistant") || !strcmp(type, "assistant_text") || !strcmp(type, "response")) {
         const String value = firstString(doc, "text", "response");
         Serial.printf("Jarvis: %s\n", value.c_str());
         emit(VoiceEvent::Assistant, value);
@@ -167,34 +192,30 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
     Serial.printf("Core Event: %s\n", text.c_str());
 }
 
-void VoiceProtocol::sendAudioStart() {
-#if JARVIS_PROTOCOL_STRUCTURED
+void VoiceProtocol::sendSessionStart() {
     JsonDocument doc;
-    doc["type"] = "audio_start";
-    doc["satellite_id"] = JARVIS_SATELLITE_ID;
-    doc["format"] = "pcm_s16le";
-    doc["sample_rate"] = JARVIS_AUDIO_RATE;
-    doc["channels"] = JARVIS_AUDIO_CHANNELS;
+    doc["type"] = "session.start";
+    doc["language"] = "de";
+    doc["auto_chat"] = true;
+    doc["auto_tts"] = false;
+    doc["content_type"] = "audio/wav";
+
     String out;
     serializeJson(doc, out);
     sendJson(out);
-#endif
 }
 
-bool VoiceProtocol::sendAudio(const int16_t* samples, size_t count) {
-    if (!connected_ || !samples || count == 0) return false;
-    return ws_.sendBIN(reinterpret_cast<const uint8_t*>(samples), count * sizeof(int16_t));
+bool VoiceProtocol::sendWav(const uint8_t* data, size_t length) {
+    if (!connected_ || !data || length == 0) return false;
+    return ws_.sendBIN(const_cast<uint8_t*>(data), length);
 }
 
-void VoiceProtocol::sendAudioEnd() {
-#if JARVIS_PROTOCOL_STRUCTURED
+void VoiceProtocol::sendAudioCommit() {
     JsonDocument doc;
-    doc["type"] = "audio_end";
-    doc["satellite_id"] = JARVIS_SATELLITE_ID;
+    doc["type"] = "audio.commit";
     String out;
     serializeJson(doc, out);
     sendJson(out);
-#endif
 }
 
 void VoiceProtocol::sendPing() {

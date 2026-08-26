@@ -23,6 +23,9 @@
 #ifndef JARVIS_CORE_TLS
 #define JARVIS_CORE_TLS 0
 #endif
+#ifndef JARVIS_CORE_TOKEN
+#define JARVIS_CORE_TOKEN ""
+#endif
 
 #ifndef JARVIS_SATELLITE_ID
 #define JARVIS_SATELLITE_ID "satellite-esp32-01"

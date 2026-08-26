@@ -19,10 +19,22 @@ private:
     bool recording_ = false;
     uint32_t recordingStartedAt_ = 0;
     uint32_t lastStatusAt_ = 0;
+    String serialCommand_;
+    bool sttTestActive_ = false;
+    uint8_t* recordingBuffer_ = nullptr;
+    size_t recordingCapacityBytes_ = 0;
+    size_t recordingPcmBytes_ = 0;
 
     void ensureProtocol();
     void startRecording();
     void stopRecording();
     void pumpRecording();
+    bool allocateRecordingBuffer();
+    void freeRecordingBuffer();
+    void finalizeWavHeader();
     void onVoiceEvent(VoiceEvent event, const String& text);
+    void pollSerialConsole();
+    void printStatus() const;
+    void printConsoleHelp() const;
+    void runMicTest();
 };

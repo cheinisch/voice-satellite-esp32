@@ -26,8 +26,20 @@ bool Waveshare185CTouch::readBytes(uint8_t reg, uint8_t* data, size_t len) {
 }
 
 bool Waveshare185CTouch::consumeTap() {
-    if (!wire_ || millis() - lastPollAt_ < 35) return false;
+    if (!wire_) return false;
+
+    // CST816 INT is active-low. Do not hammer the shared I2C bus while the
+    // display is idle; only read touch data when the controller signals an
+    // event. This also prevents a failed I2C transaction from flooding the
+    // serial console every ~35 ms.
+    if (digitalRead(waveshare185c::TOUCH_INT) != LOW) {
+        wasTouched_ = false;
+        return false;
+    }
+
+    if (millis() - lastPollAt_ < 35) return false;
     lastPollAt_ = millis();
+
     uint8_t finger = 0;
     if (!readBytes(0x02, &finger, 1)) return false;
     const bool touched = (finger & 0x0F) > 0;

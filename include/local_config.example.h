@@ -11,6 +11,10 @@
 #define JARVIS_CORE_PATH        "/api/v1/voice/live"
 #define JARVIS_CORE_TLS         0
 
+// API-/Voice-Token. Wird als HTTP-Header beim WebSocket-Upgrade gesendet:
+// Authorization: Bearer <token>
+#define JARVIS_CORE_TOKEN       "jv_DEIN_TOKEN"
+
 #define JARVIS_SATELLITE_ID     "satellite-livingroom"
 #define JARVIS_SATELLITE_NAME   "Wohnzimmer"
 

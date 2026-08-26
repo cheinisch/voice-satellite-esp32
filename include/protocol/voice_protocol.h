@@ -27,9 +27,9 @@ public:
     bool connected() const { return connected_; }
     bool ready() const { return ready_; }
 
-    void sendAudioStart();
-    bool sendAudio(const int16_t* samples, size_t count);
-    void sendAudioEnd();
+    void sendSessionStart();
+    bool sendWav(const uint8_t* data, size_t length);
+    void sendAudioCommit();
     void sendPing();
 
     void setBinaryHandler(BinaryHandler handler) { binaryHandler_ = std::move(handler); }
@@ -37,6 +37,7 @@ public:
 
 private:
     WebSocketsClient ws_;
+    String authorizationHeader_;
     bool connected_ = false;
     bool ready_ = false;
     const Board* board_ = nullptr;

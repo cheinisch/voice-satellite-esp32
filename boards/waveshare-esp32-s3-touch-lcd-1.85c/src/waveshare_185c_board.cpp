@@ -3,7 +3,13 @@
 #include <Wire.h>
 
 bool Waveshare185CBoard::begin() {
-    Wire.begin(waveshare185c::I2C_SDA, waveshare185c::I2C_SCL, 400000);
+    // This is the single owner/initialization point for the Waveshare shared
+    // I2C bus. Audio codecs must reuse Wire without reinitializing it.
+    if (!Wire.begin(waveshare185c::I2C_SDA, waveshare185c::I2C_SCL, 100000)) {
+        Serial.println("Waveshare I2C-Bus konnte nicht initialisiert werden.");
+        return false;
+    }
+    Wire.setTimeOut(50);
 
     if (!expander_.begin(Wire, waveshare185c::TCA9554_ADDR)) {
         Serial.println("TCA9554 nicht erreichbar.");
