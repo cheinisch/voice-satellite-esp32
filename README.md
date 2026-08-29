@@ -87,11 +87,13 @@ Dann WLAN, Core und Satellite-ID anpassen:
 #define JARVIS_CORE_HOST      "172.16.2.30"
 #define JARVIS_CORE_PORT      8081
 #define JARVIS_CORE_PATH      "/api/v1/voice/live"
+#define JARVIS_CORE_TLS       0
+#define JARVIS_CORE_TOKEN     "jv_DEIN_TOKEN"
 #define JARVIS_SATELLITE_ID   "satellite-livingroom"
 #define JARVIS_SATELLITE_NAME "Wohnzimmer"
 ```
 
-`include/local_config.h` wird nicht in Git eingecheckt.
+`include/local_config.h` wird nicht in Git eingecheckt. WLAN-Passwort und `JARVIS_CORE_TOKEN` bleiben damit lokal. Der Token wird beim WebSocket-Upgrade als `Authorization: Bearer <token>` übertragen und nicht in der seriellen Ausgabe angezeigt.
 
 ## Bauen
 
@@ -171,7 +173,9 @@ Handshake:
 }
 ```
 
-Audio-Uplink wird als rohes PCM16LE gesendet. TTS kann als binäres PCM16LE zurückkommen.
+Audio-Uplink wird im aktuellen Voice-Protokoll als PCM16LE-WAV übertragen (`session.start` → binäre WAV-Nachricht → `audio.commit`).
+
+TTS wird über den gleichen WebSocket zurückgegeben. Der Satellite akzeptiert binäres PCM16LE sowie PCM16-WAV; Mono/Stereo und übliche TTS-Sampleraten werden auf das interne 16-kHz-Mono-Playbackformat umgesetzt.
 
 ## Entwicklungsgrenzen
 
@@ -229,3 +233,52 @@ Der Workflow **Create firmware release** baut automatisch `waveshare-1_85c` und 
 ```
 
 Das ZIP enthält zusätzlich `bootloader.bin`, `partitions.bin`, `manifest.json` und Flash-Hinweise.
+
+## Erster STT-Test über die serielle Konsole
+
+Nach dem Flashen den Serial Monitor mit 115200 Baud öffnen:
+
+```bash
+pio device monitor -b 115200
+```
+
+Sobald `Core bereit` angezeigt wird:
+
+```text
+stt
+```
+
+und ENTER drücken. Der Satellite nimmt bis zu `JARVIS_RECORD_MS` auf. Mit `stop` kann die Aufnahme früher beendet werden. Sobald der Core das STT-Ergebnis liefert, erscheint z. B.:
+
+```text
+=== STT TEST ===
+Sprich jetzt in das Mikrofon.
+Aufnahme läuft (8s)...
+Sende Daten an Jarvis
+Du: Wie wird das Wetter morgen?
+------------------------------
+STT Ergebnis: Wie wird das Wetter morgen?
+STT Test: erfolgreich empfangen
+==============================
+```
+
+Weitere Konsolenbefehle: `status`, `help` und als Kurzform für `stt` auch `r`.
+
+
+
+### Mikrofon-Hardwaretest
+
+Vor einem STT-Test kann der Waveshare-Audioeingang unabhängig vom Core geprüft werden. Im seriellen Monitor `mic` eingeben. Der Test liest zwei Sekunden PCM direkt über I2S und meldet Anzahl Samples sowie Pegelstatistik. Bei `0 Samples` liegt der Fehler lokal bei I2S/ES7210.
+
+## Serielle Audio-Tests
+
+Nach dem Flashen im Monitor (115200 Baud):
+
+```text
+mic   # lokaler Mikrofontest
+spk   # lokaler 1-kHz-Lautsprechertest, kein Core nötig
+stt   # STT-only über Jarvis, auto_tts=false
+tts   # kompletter STT -> Jarvis -> TTS -> Lautsprecher Test
+```
+
+Normale Touch-/BOOT-Sprachrunden verwenden standardmäßig `JARVIS_AUTO_TTS=1`. Die Antwort wird damit nach erfolgreichem STT/Assistant-Lauf über den Satellite-Lautsprecher wiedergegeben.

@@ -47,6 +47,35 @@
 #define JARVIS_AUDIO_CHUNK_MS 20
 #endif
 
+#ifndef JARVIS_AUTO_TTS
+#define JARVIS_AUTO_TTS 1
+#endif
+
+// TTS quality requested from Jarvis Core for auto-TTS sessions.
+// User-facing values: low, medium, high. "medium" is translated to
+// the Core API quality name "balanced" for compatibility.
+#ifndef JARVIS_TTS_QUALITY
+#define JARVIS_TTS_QUALITY "low"
+#endif
+
+
+#ifndef JARVIS_NTP_SERVER
+#define JARVIS_NTP_SERVER "pool.ntp.org"
+#endif
+#ifndef JARVIS_TIMEZONE_POSIX
+#define JARVIS_TIMEZONE_POSIX "CET-1CEST,M3.5.0,M10.5.0/3"
+#endif
+
+#ifndef JARVIS_WAVESHARE_TOUCH_SWAP_XY
+#define JARVIS_WAVESHARE_TOUCH_SWAP_XY 0
+#endif
+#ifndef JARVIS_WAVESHARE_TOUCH_INVERT_X
+#define JARVIS_WAVESHARE_TOUCH_INVERT_X 0
+#endif
+#ifndef JARVIS_WAVESHARE_TOUCH_INVERT_Y
+#define JARVIS_WAVESHARE_TOUCH_INVERT_Y 0
+#endif
+
 #ifndef JARVIS_RECONNECT_MS
 #define JARVIS_RECONNECT_MS 3000
 #endif
@@ -92,4 +121,8 @@
 #endif
 #ifndef JARVIS_WAVESHARE_MIC_GAIN
 #define JARVIS_WAVESHARE_MIC_GAIN 70
+#endif
+
+#ifndef JARVIS_SEND_HELLO
+#define JARVIS_SEND_HELLO 0
 #endif

@@ -12,4 +12,8 @@ public:
 private:
     struct Impl;
     Impl* impl_;
+    bool ensureSpeaker();
+    bool startMicI2s();
+    bool restoreMicPath();
+    bool startSpeakerI2s();
 };

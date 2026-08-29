@@ -11,6 +11,7 @@ const char* stateName(SatelliteState state) {
         case SatelliteState::Listening: return "LISTENING";
         case SatelliteState::Processing: return "PROCESSING";
         case SatelliteState::Speaking: return "SPEAKING";
+        case SatelliteState::Muted: return "MUTED";
         case SatelliteState::Error: return "ERROR";
     }
     return "?";
@@ -59,7 +60,7 @@ bool FutureProofHomesSatellite11Board::consumeVoiceTrigger() {
 
 void FutureProofHomesSatellite11Board::updateStatusLed(SatelliteState state) {
     const bool on = state == SatelliteState::Listening || state == SatelliteState::Processing ||
-                    state == SatelliteState::Speaking || state == SatelliteState::Error;
+                    state == SatelliteState::Speaking || state == SatelliteState::Muted || state == SatelliteState::Error;
     digitalWrite(SAT1_STATUS_LED_PIN, on ? HIGH : LOW);
 }
 

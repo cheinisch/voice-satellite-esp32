@@ -11,6 +11,7 @@ const char* stateName(SatelliteState state) {
         case SatelliteState::Listening: return "LISTENING";
         case SatelliteState::Processing: return "PROCESSING";
         case SatelliteState::Speaking: return "SPEAKING";
+        case SatelliteState::Muted: return "MUTED";
         case SatelliteState::Error: return "ERROR";
     }
     return "?";

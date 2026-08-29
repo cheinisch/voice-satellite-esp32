@@ -1,6 +1,7 @@
 #include "network/wifi_manager.h"
 #include <WiFi.h>
 #include "jarvis_config.h"
+#include <time.h>
 
 bool WifiManager::connect(uint32_t timeoutMs) {
     if (String(JARVIS_WIFI_SSID) == "CHANGE_ME") {
@@ -22,6 +23,8 @@ bool WifiManager::connect(uint32_t timeoutMs) {
 
     if (WiFi.status() == WL_CONNECTED) {
         Serial.printf("WLAN verbunden: %s, RSSI %d dBm\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
+        configTzTime(JARVIS_TIMEZONE_POSIX, JARVIS_NTP_SERVER);
+        Serial.printf("Zeitabgleich: NTP=%s TZ=%s\n", JARVIS_NTP_SERVER, JARVIS_TIMEZONE_POSIX);
         return true;
     }
 

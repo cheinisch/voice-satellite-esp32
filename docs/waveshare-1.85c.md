@@ -32,3 +32,9 @@ with `setActive=false`; this preserves the codecs' default 7-bit addresses
 The V2 microphone path uses a Waveshare-specific ES7210 register profile: 16 kHz, 16-bit stereo I2S, MCLK ratio 256, 2.87 V microphone bias and 36 dB analog gain. This intentionally follows the vendor V2 speech-recognition example rather than the generic ES7210 wrapper.
 
 The serial console prints I2C probes for ES8311 at `0x18` and ES7210 at `0x40`. Use `mic` to run a two-second local microphone test before testing STT.
+
+## Audio bring-up / diagnostics
+
+The microphone path (ES7210 + ESP32-S3 I2S RX) is a required part of board initialization.
+The ES8311 speaker is initialized lazily on the first TTS frame so a speaker problem cannot prevent STT tests.
+On boot the serial console prints each initialization stage and the `mic` command tests the local microphone path without Jarvis/STT.

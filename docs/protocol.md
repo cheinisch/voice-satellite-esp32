@@ -17,7 +17,7 @@ Der ESP32 verwendet denselben Voice-WebSocket-Vertrag wie der Linux-/ReSpeaker-S
   "type": "session.start",
   "language": "de",
   "auto_chat": true,
-  "auto_tts": false,
+  "auto_tts": true,
   "content_type": "audio/wav"
 }
 ```
@@ -33,6 +33,8 @@ Primäre `jarvis.voice.v1`-Events:
 - `transcript.partial`
 - `transcript.final`
 - `assistant.final`
+- TTS start/end events (`tts_start`, `tts_end` und kompatible Aliase)
+- binäre TTS-Audiodaten (PCM16 oder PCM16-WAV)
 - `error`
 
 Zur Abwärtskompatibilität akzeptiert der ESP32 zusätzlich ältere Aliasnamen für Transkript-/Assistant-/TTS-Ereignisse.
@@ -46,3 +48,9 @@ Authorization: Bearer <token>
 ```
 
 Der Token wird absichtlich nicht in `hello` übertragen und nicht geloggt.
+
+## TTS / Audio zurück zum Satellite
+
+Normale Sprachrunden setzen `auto_tts=true`. Der serielle Befehl `stt` setzt ihn zum isolierten STT-Test dagegen bewusst auf `false`; `tts` startet einen vollständigen STT→Assistant→TTS-Roundtrip.
+
+Der ESP32 akzeptiert binäre PCM16-Daten sowie vollständige PCM16-WAV-Nachrichten. WAV-Header werden lokal ausgewertet; Mono/Stereo wird auf Mono reduziert und übliche TTS-Sampleraten (z. B. 22050/24000/48000 Hz) werden beim Streaming auf das interne 16-kHz-Ausgabeformat umgesetzt.

@@ -14,6 +14,7 @@ public:
     BoardCapabilities capabilities() const override;
     AudioIO& audio() override { return audio_; }
     bool consumeVoiceTrigger() override;
+    bool consumeMuteToggle() override;
     void setState(SatelliteState state, const String& detail) override;
     void showTranscript(const String& text) override;
     void showAssistant(const String& text) override;
@@ -23,6 +24,7 @@ private:
     Waveshare185CDisplay display_;
     Waveshare185CAudio audio_;
     bool trigger_ = false;
+    bool muteToggle_ = false;
     bool lastBoot_ = false;
     uint32_t lastBootEdgeAt_ = 0;
 };

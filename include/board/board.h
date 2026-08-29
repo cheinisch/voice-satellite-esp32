@@ -11,6 +11,7 @@ enum class SatelliteState {
     Listening,
     Processing,
     Speaking,
+    Muted,
     Error,
 };
 
@@ -38,6 +39,8 @@ public:
 
     // Liefert true genau einmal pro Betätigung (Touch oder Taste).
     virtual bool consumeVoiceTrigger() = 0;
+    // Optional separate UI control. Defaults to unsupported on headless boards.
+    virtual bool consumeMuteToggle() { return false; }
 
     virtual void setState(SatelliteState state, const String& detail = String()) = 0;
     virtual void showTranscript(const String& text) = 0;

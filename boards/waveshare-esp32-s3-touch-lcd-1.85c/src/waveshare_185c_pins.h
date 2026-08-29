@@ -27,6 +27,10 @@ constexpr int LCD_BL = 5;
 constexpr int TOUCH_INT = 4;
 constexpr int BOOT_BUTTON = 0;
 
-constexpr uint8_t EXIO_TOUCH_RST = 1;
-constexpr uint8_t EXIO_LCD_RST = 2;
+// Waveshare documentation names the TCA9554 outputs EXIO1/EXIO2 (1-based).
+// Our expander API uses zero-based bit indices, therefore:
+//   EXIO1 -> bit 0 -> CST816 reset
+//   EXIO2 -> bit 1 -> ST77916 reset
+constexpr uint8_t EXIO_TOUCH_RST = 0;
+constexpr uint8_t EXIO_LCD_RST = 1;
 }

@@ -11,6 +11,23 @@ const char* firstString(JsonDocument& doc, const char* a, const char* b) {
     value = doc[b].as<const char*>();
     return value ? value : "";
 }
+
+const char* normalizedTtsQuality() {
+    const String configured = String(JARVIS_TTS_QUALITY);
+    if (!configured.length()) return "low";
+
+    if (configured.equalsIgnoreCase("low")) return "low";
+    if (configured.equalsIgnoreCase("medium") || configured.equalsIgnoreCase("balanced")) {
+        return "balanced";
+    }
+    if (configured.equalsIgnoreCase("high")) return "high";
+
+    Serial.printf(
+        "WARNUNG: Unbekannte JARVIS_TTS_QUALITY '%s'; verwende low.\n",
+        configured.c_str()
+    );
+    return "low";
+}
 }
 
 void VoiceProtocol::begin(const Board& board) {
@@ -56,11 +73,14 @@ void VoiceProtocol::onEvent(WStype_t type, uint8_t* payload, size_t length) {
             ready_ = false;
             Serial.printf("Core verbunden: %s:%d%s\n", JARVIS_CORE_HOST, JARVIS_CORE_PORT, JARVIS_CORE_PATH);
             emit(VoiceEvent::Connected);
+#if JARVIS_SEND_HELLO
             sendHello();
+#endif
             break;
         case WStype_DISCONNECTED:
             connected_ = false;
             ready_ = false;
+            binaryFragmentActive_ = false;
             Serial.println("Core getrennt; Reconnect läuft ...");
             emit(VoiceEvent::Disconnected);
             break;
@@ -69,6 +89,17 @@ void VoiceProtocol::onEvent(WStype_t type, uint8_t* payload, size_t length) {
             break;
         case WStype_BIN:
             if (binaryHandler_) binaryHandler_(payload, length);
+            break;
+        case WStype_FRAGMENT_BIN_START:
+            binaryFragmentActive_ = true;
+            if (binaryHandler_) binaryHandler_(payload, length);
+            break;
+        case WStype_FRAGMENT:
+            if (binaryFragmentActive_ && binaryHandler_) binaryHandler_(payload, length);
+            break;
+        case WStype_FRAGMENT_FIN:
+            if (binaryFragmentActive_ && binaryHandler_) binaryHandler_(payload, length);
+            binaryFragmentActive_ = false;
             break;
         case WStype_ERROR:
             Serial.println("WebSocket-Fehler");
@@ -114,6 +145,31 @@ void VoiceProtocol::sendHello() {
     sendJson(out);
 }
 
+void VoiceProtocol::updateTtsFormat(JsonDocument& doc) {
+    uint32_t rate = 0;
+    uint32_t channels = 0;
+    uint32_t bits = 0;
+
+    if (!doc["sample_rate"].isNull()) rate = doc["sample_rate"].as<uint32_t>();
+    if (!rate && !doc["sample_rate_hz"].isNull()) rate = doc["sample_rate_hz"].as<uint32_t>();
+    if (!rate && !doc["rate"].isNull()) rate = doc["rate"].as<uint32_t>();
+    if (!doc["channels"].isNull()) channels = doc["channels"].as<uint32_t>();
+    if (!doc["bits_per_sample"].isNull()) bits = doc["bits_per_sample"].as<uint32_t>();
+    if (!bits && !doc["bits"].isNull()) bits = doc["bits"].as<uint32_t>();
+
+    JsonObject audio = doc["audio"].as<JsonObject>();
+    if (!audio.isNull()) {
+        if (!rate && !audio["sample_rate"].isNull()) rate = audio["sample_rate"].as<uint32_t>();
+        if (!rate && !audio["sample_rate_hz"].isNull()) rate = audio["sample_rate_hz"].as<uint32_t>();
+        if (!channels && !audio["channels"].isNull()) channels = audio["channels"].as<uint32_t>();
+        if (!bits && !audio["bits_per_sample"].isNull()) bits = audio["bits_per_sample"].as<uint32_t>();
+    }
+
+    if (rate >= 8000 && rate <= 96000) ttsSampleRate_ = rate;
+    if (channels >= 1 && channels <= 2) ttsChannels_ = static_cast<uint8_t>(channels);
+    if (bits == 16) ttsBitsPerSample_ = 16;
+}
+
 void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
     String text;
     text.reserve(length + 1);
@@ -130,10 +186,13 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
     const char* protocol = doc["protocol"] | "";
 
     if (!strcmp(type, "hello") || !strcmp(type, "hello_ack") || !strcmp(type, "welcome") || !strcmp(type, "ready")) {
+        const bool wasReady = ready_;
         ready_ = true;
         const String detail = strlen(protocol) ? String(protocol) : String(JARVIS_PROTOCOL_NAME);
-        Serial.printf("Core bereit: %s\n", detail.c_str());
-        emit(VoiceEvent::Ready, detail);
+        if (!wasReady) {
+            Serial.printf("Core bereit: %s\n", detail.c_str());
+            emit(VoiceEvent::Ready, detail);
+        }
 
         const char* minVersion = doc["minimum_client_version"].as<const char*>();
         const char* latestVersion = doc["latest_client_version"].as<const char*>();
@@ -169,15 +228,26 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         return;
     }
 
-    if (!strcmp(type, "tts_start") || !strcmp(type, "audio_output_start")) {
-        Serial.println("TTS Wiedergabe ...");
+    if (!strcmp(type, "tts_start") || !strcmp(type, "tts.start") || !strcmp(type, "tts.started") ||
+        !strcmp(type, "audio_output_start") || !strcmp(type, "audio.output.start") ||
+        !strcmp(type, "response.audio.start")) {
+        updateTtsFormat(doc);
+        Serial.printf("TTS Wiedergabe ... (%lu Hz, %u Kanal/Kanäle, %u Bit)\n",
+                      static_cast<unsigned long>(ttsSampleRate_), ttsChannels_, ttsBitsPerSample_);
         emit(VoiceEvent::TtsStart);
         return;
     }
 
-    if (!strcmp(type, "tts_end") || !strcmp(type, "audio_output_end")) {
+    if (!strcmp(type, "tts_end") || !strcmp(type, "tts.end") || !strcmp(type, "tts.finished") ||
+        !strcmp(type, "audio_output_end") || !strcmp(type, "audio.output.end") ||
+        !strcmp(type, "response.audio.done")) {
         Serial.println("TTS beendet.");
         emit(VoiceEvent::TtsEnd);
+        return;
+    }
+
+    if (!strcmp(type, "reset")) {
+        Serial.println("Voice Session zurückgesetzt.");
         return;
     }
 
@@ -192,13 +262,35 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
     Serial.printf("Core Event: %s\n", text.c_str());
 }
 
-void VoiceProtocol::sendSessionStart() {
+void VoiceProtocol::sendSessionStart(bool autoTts) {
     JsonDocument doc;
     doc["type"] = "session.start";
     doc["language"] = "de";
     doc["auto_chat"] = true;
-    doc["auto_tts"] = true;
+    doc["auto_tts"] = autoTts;
     doc["content_type"] = "audio/wav";
+
+    // ESP32 defaults to the fast/compact low profile. local_config.h may select
+    // low, medium or high. The Core API calls the middle tier "balanced", so
+    // "medium" is normalized before it is sent.
+    const char* ttsQuality = normalizedTtsQuality();
+    JsonObject tts = doc["tts"].to<JsonObject>();
+    tts["stream"] = true;
+    tts["quality"] = ttsQuality;
+    tts["chunk_bytes"] = 12U * 1024U;
+
+    // Keep frames below arduinoWebSockets' stock ESP32 receive limit (15 KiB).
+    // Older Core versions ignore these hints; streaming-capable Core versions
+    // use them to split TTS audio into ESP-friendly chunks.
+    doc["client_max_binary_frame_bytes"] = 14U * 1024U;
+    doc["preferred_tts_chunk_bytes"] = 12U * 1024U;
+
+    Serial.printf(
+        "TTS Profil: %s (Core quality=%s, Streaming=ja, Chunk=%u Bytes)\n",
+        JARVIS_TTS_QUALITY,
+        ttsQuality,
+        12U * 1024U
+    );
 
     String out;
     serializeJson(doc, out);
