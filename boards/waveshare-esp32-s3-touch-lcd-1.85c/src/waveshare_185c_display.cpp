@@ -1,5 +1,6 @@
 #include "waveshare_185c_display.h"
 #include "waveshare_185c_pins.h"
+#include <U8g2lib.h>
 #include <Arduino_GFX_Library.h>
 #include <time.h>
 #include <math.h>
@@ -35,50 +36,101 @@ constexpr int DOT_GAP  = 16;
 } // namespace
 
 // ---------------------------------------------------------------------------
-// Pixel-accurate centering for the built-in bitmap font
-// charW = 6*size, charH = 8*size
+// U8g2 text helpers
+// Arduino_GFX exposes U8g2 font support when U8g2lib.h is included first.
+// Coordinates use a top edge so the dashboard layout stays predictable even
+// though U8g2 fonts are baseline-oriented internally.
 // ---------------------------------------------------------------------------
 
-void Waveshare185CDisplay::centered(const String& text, int y,
-                                    uint16_t color, uint8_t size) {
-    if (!ready_) return;
-    const int charW = 6 * size;
-    int x = (360 - static_cast<int>(text.length()) * charW) / 2;
-    if (x < 4) x = 4;
+int Waveshare185CDisplay::textWidth(const String& text, const uint8_t* font) {
+    if (!ready_ || !font) return 0;
+    gfx_->setFont(font);
+    gfx_->setTextSize(1);
+    int16_t x1 = 0, y1 = 0;
+    uint16_t w = 0, h = 0;
+    gfx_->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    return static_cast<int>(w);
+}
+
+void Waveshare185CDisplay::fontText(const String& text, int x, int topY,
+                                    uint16_t color, const uint8_t* font) {
+    if (!ready_ || !font) return;
+    gfx_->setFont(font);
+    gfx_->setTextSize(1);
     gfx_->setTextColor(color);
-    gfx_->setTextSize(size);
-    gfx_->setCursor(x, y);
+
+    int16_t x1 = 0, y1 = 0;
+    uint16_t w = 0, h = 0;
+    gfx_->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    gfx_->setCursor(x - x1, topY - y1);
     gfx_->print(text);
 }
 
-void Waveshare185CDisplay::lineText(const String& text, int x, int y,
-                                    int maxChars, uint16_t color, uint8_t size) {
+void Waveshare185CDisplay::centeredFont(const String& text, int topY,
+                                        uint16_t color, const uint8_t* font) {
+    if (!ready_ || !font) return;
+    gfx_->setFont(font);
+    gfx_->setTextSize(1);
     gfx_->setTextColor(color);
-    gfx_->setTextSize(size);
-    gfx_->setCursor(x, y);
-    gfx_->print(compact(text, static_cast<size_t>(maxChars)));
+
+    int16_t x1 = 0, y1 = 0;
+    uint16_t w = 0, h = 0;
+    gfx_->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    const int x = (360 - static_cast<int>(w)) / 2 - x1;
+    gfx_->setCursor(max(2, x), topY - y1);
+    gfx_->print(text);
 }
 
-void Waveshare185CDisplay::wrappedText(const String& source, int x, int y,
-                                       int widthChars, int maxLines,
-                                       uint16_t color, uint8_t size) {
-    String text = source;
-    text.replace("\n", " ");
-    text.trim();
-    const int lineH = 9 * size + 2;
-    for (int line = 0; line < maxLines && text.length(); ++line) {
-        int take = min(static_cast<int>(text.length()), widthChars);
-        if (take < static_cast<int>(text.length())) {
-            int split = text.lastIndexOf(' ', take);
-            if (split > widthChars / 2) take = split;
+void Waveshare185CDisplay::wrappedFontText(const String& source, int x, int topY,
+                                           int maxWidth, int maxLines,
+                                           uint16_t color, const uint8_t* font,
+                                           int lineHeight) {
+    if (!ready_ || !font || maxWidth <= 0 || maxLines <= 0) return;
+
+    String remaining = source;
+    remaining.replace("\n", " ");
+    remaining.trim();
+
+    for (int line = 0; line < maxLines && remaining.length(); ++line) {
+        String current;
+        int consumed = 0;
+
+        while (consumed < static_cast<int>(remaining.length())) {
+            int nextSpace = remaining.indexOf(' ', consumed);
+            const int wordEnd = nextSpace < 0 ? static_cast<int>(remaining.length()) : nextSpace;
+            const String word = remaining.substring(consumed, wordEnd);
+            const String candidate = current.length() ? current + " " + word : word;
+
+            if (current.length() && textWidth(candidate, font) > maxWidth) break;
+
+            current = candidate;
+            consumed = wordEnd;
+            while (consumed < static_cast<int>(remaining.length()) && remaining[consumed] == ' ') ++consumed;
+
+            if (textWidth(current, font) > maxWidth) {
+                // Very long words are clipped by shrinking byte-wise. This is
+                // only a safety path; normal German/English words wrap above.
+                while (current.length() > 1 && textWidth(current + "...", font) > maxWidth)
+                    current.remove(current.length() - 1);
+                current += "...";
+                consumed = max(consumed, 1);
+                break;
+            }
         }
-        String part = text.substring(0, take);
-        part.trim();
-        if (line == maxLines - 1 && take < static_cast<int>(text.length()))
-            part = compact(part, widthChars - 3) + "...";
-        lineText(part, x, y + line * lineH, widthChars, color, size);
-        text.remove(0, take);
-        text.trim();
+
+        if (!current.length()) break;
+
+        const bool more = consumed < static_cast<int>(remaining.length());
+        if (line == maxLines - 1 && more) {
+            while (current.length() > 1 && textWidth(current + "...", font) > maxWidth)
+                current.remove(current.length() - 1);
+            current += "...";
+        }
+
+        fontText(current, x, topY + line * lineHeight, color, font);
+        if (!more || line == maxLines - 1) break;
+        remaining.remove(0, consumed);
+        remaining.trim();
     }
 }
 
@@ -159,6 +211,9 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
         return false;
     }
 
+    gfx_->setUTF8Print(true);
+    gfx_->setTextWrap(false);
+    Serial.println("Display: U8g2-Fonts + UTF-8 aktiviert.");
     Serial.println("Display: ST77916/QSPI bereit (360x360, 80 MHz).");
     digitalWrite(waveshare185c::LCD_BL, HIGH);
     delay(20);
@@ -177,7 +232,7 @@ void Waveshare185CDisplay::loop() {
 }
 
 // ---------------------------------------------------------------------------
-// Clock — pixel-centred with size-3 bitmap font (18×8 px per char)
+// Clock — larger U8g2 Logisoso face, slightly lower than the old bitmap clock
 // ---------------------------------------------------------------------------
 
 void Waveshare185CDisplay::renderClock(bool force) {
@@ -195,14 +250,12 @@ void Waveshare185CDisplay::renderClock(bool force) {
     char buf[8] = "--:--";
     if (synced) snprintf(buf, sizeof(buf), "%02d:%02d", nowInfo.tm_hour, nowInfo.tm_min);
 
-    // Clear top band
-    gfx_->fillRect(0, 8, 360, 46, BG);
-
-    // Size-3 clock: each char is 18 px wide, 24 px tall. "HH:MM" = 5 chars = 90 px.
-    centered(String(buf), 14, TEXT, 3);
-
-    // "JARVIS CORE" in cyan below, size 1
-    centered("JARVIS CORE", 42, MUTED_TXT, 1);
+    // The clock intentionally sits a little lower than before. Logisoso 38 is
+    // visibly larger and smoother than the old 3x bitmap font while leaving
+    // enough air above the central status ring.
+    gfx_->fillRect(0, 8, 360, 72, BG);
+    centeredFont(String(buf), 20, TEXT, u8g2_font_logisoso38_tr);
+    centeredFont("JARVIS CORE", 65, MUTED_TXT, u8g2_font_helvR08_tf);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,12 +296,12 @@ void Waveshare185CDisplay::renderDotGrid(uint16_t accent) {
 // ---------------------------------------------------------------------------
 
 void Waveshare185CDisplay::renderStatusLabels(uint16_t accent) {
-    const int baseY = CY + R2 + 10;
-    centered("JARVIS CORE", baseY,      MUTED_TXT, 1);
-    centered(stateLabel(),  baseY + 14, accent,    1);
+    const int baseY = CY + R2 + 9;
+    centeredFont("JARVIS CORE", baseY, MUTED_TXT, u8g2_font_helvR08_tf);
+    centeredFont(stateLabel(), baseY + 14, accent, u8g2_font_helvB10_tf);
     if (detail_.length()) {
-        gfx_->fillRect(60, baseY + 26, 240, 10, BG);
-        centered(compact(detail_, 38), baseY + 26, MUTED_TXT, 1);
+        gfx_->fillRect(48, baseY + 30, 264, 14, BG);
+        centeredFont(compact(detail_, 36), baseY + 30, MUTED_TXT, u8g2_font_helvR08_tf);
     }
 }
 
@@ -312,13 +365,12 @@ void Waveshare185CDisplay::showTranscript(const String& text) {
     gfx_->drawRoundRect(bx, by, bw, bh, 10, CYAN);
 
     // Badge label "DU"
-    gfx_->fillRect(bx + 10, by - 6, 22, 12, PANEL_2);
-    gfx_->setTextColor(CYAN); gfx_->setTextSize(1);
-    gfx_->setCursor(bx + 13, by - 4); gfx_->print("DU");
+    gfx_->fillRect(bx + 10, by - 6, 26, 13, PANEL_2);
+    fontText("DU", bx + 13, by - 4, CYAN, u8g2_font_helvB08_tf);
 
-    const int textX     = bx + 10;
-    const int textChars = max(1, (bw - 20) / 6);  // 6 px per char at size 1
-    wrappedText(text, textX, by + 12, textChars, 3, TEXT, 1);
+    const int textX = bx + 10;
+    wrappedFontText(text, textX, by + 12, bw - 20, 3,
+                    TEXT, u8g2_font_helvR08_tf, 12);
 }
 
 void Waveshare185CDisplay::showAssistant(const String& text) {
@@ -341,13 +393,12 @@ void Waveshare185CDisplay::showAssistant(const String& text) {
     gfx_->drawRoundRect(bx, by, bw, bh, 10, GOLD);
 
     // Badge label "JARVIS"
-    gfx_->fillRect(bx + 10, by - 6, 46, 12, PANEL_2);
-    gfx_->setTextColor(GOLD); gfx_->setTextSize(1);
-    gfx_->setCursor(bx + 13, by - 4); gfx_->print("JARVIS");
+    gfx_->fillRect(bx + 10, by - 6, 52, 13, PANEL_2);
+    fontText("JARVIS", bx + 13, by - 4, GOLD, u8g2_font_helvB08_tf);
 
-    const int textX     = bx + 10;
-    const int textChars = max(1, (bw - 20) / 6);
-    wrappedText(text, textX, by + 12, textChars, 3, TEXT, 1);
+    const int textX = bx + 10;
+    wrappedFontText(text, textX, by + 12, bw - 20, 3,
+                    TEXT, u8g2_font_helvR08_tf, 12);
 }
 
 // ---------------------------------------------------------------------------

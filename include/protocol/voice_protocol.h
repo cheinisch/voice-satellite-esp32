@@ -32,10 +32,14 @@ public:
     bool sendWav(const uint8_t* data, size_t length);
     void sendAudioCommit();
     void sendPing();
+    void sendTtsAck(uint32_t sequence, size_t receivedBytes);
 
     uint32_t ttsSampleRate() const { return ttsSampleRate_; }
     uint8_t ttsChannels() const { return ttsChannels_; }
     uint8_t ttsBitsPerSample() const { return ttsBitsPerSample_; }
+    bool ttsAckRequired() const { return ttsAckRequired_; }
+    size_t ttsExpectedBytes() const { return ttsExpectedBytes_; }
+    uint32_t ttsExpectedChunks() const { return ttsExpectedChunks_; }
 
     void setBinaryHandler(BinaryHandler handler) { binaryHandler_ = std::move(handler); }
     void setEventHandler(EventHandler handler) { eventHandler_ = std::move(handler); }
@@ -52,6 +56,9 @@ private:
     uint32_t ttsSampleRate_ = 16000;
     uint8_t ttsChannels_ = 1;
     uint8_t ttsBitsPerSample_ = 16;
+    bool ttsAckRequired_ = false;
+    size_t ttsExpectedBytes_ = 0;
+    uint32_t ttsExpectedChunks_ = 0;
 
     void onEvent(WStype_t type, uint8_t* payload, size_t length);
     void sendHello();

@@ -232,8 +232,17 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         !strcmp(type, "audio_output_start") || !strcmp(type, "audio.output.start") ||
         !strcmp(type, "response.audio.start")) {
         updateTtsFormat(doc);
+        ttsAckRequired_ = doc["ack_required"] | false;
+        ttsExpectedBytes_ = doc["length"] | 0U;
+        ttsExpectedChunks_ = doc["chunks"] | 0U;
         Serial.printf("TTS Wiedergabe ... (%lu Hz, %u Kanal/Kanäle, %u Bit)\n",
                       static_cast<unsigned long>(ttsSampleRate_), ttsChannels_, ttsBitsPerSample_);
+        if (ttsExpectedBytes_ > 0) {
+            Serial.printf("TTS Transfer: erwartet %u Bytes in %lu Chunk(s), ACK=%s.\n",
+                          static_cast<unsigned>(ttsExpectedBytes_),
+                          static_cast<unsigned long>(ttsExpectedChunks_),
+                          ttsAckRequired_ ? "ja" : "nein");
+        }
         emit(VoiceEvent::TtsStart);
         return;
     }
@@ -278,6 +287,8 @@ void VoiceProtocol::sendSessionStart(bool autoTts) {
     tts["stream"] = true;
     tts["quality"] = ttsQuality;
     tts["chunk_bytes"] = 12U * 1024U;
+    tts["ack"] = true;
+    tts["ack_timeout_ms"] = 8000U;
 
     // Keep frames below arduinoWebSockets' stock ESP32 receive limit (15 KiB).
     // Older Core versions ignore these hints; streaming-capable Core versions
@@ -286,7 +297,7 @@ void VoiceProtocol::sendSessionStart(bool autoTts) {
     doc["preferred_tts_chunk_bytes"] = 12U * 1024U;
 
     Serial.printf(
-        "TTS Profil: %s (Core quality=%s, Streaming=ja, Chunk=%u Bytes)\n",
+        "TTS Profil: %s (Core quality=%s, Streaming=ja, ACK=ja, Chunk=%u Bytes)\n",
         JARVIS_TTS_QUALITY,
         ttsQuality,
         12U * 1024U
@@ -315,6 +326,17 @@ void VoiceProtocol::sendPing() {
     JsonDocument doc;
     doc["type"] = "ping";
     doc["satellite_id"] = JARVIS_SATELLITE_ID;
+    String out;
+    serializeJson(doc, out);
+    sendJson(out);
+}
+
+void VoiceProtocol::sendTtsAck(uint32_t sequence, size_t receivedBytes) {
+    if (!connected_ || !ttsAckRequired_) return;
+    JsonDocument doc;
+    doc["type"] = "tts.ack";
+    doc["sequence"] = sequence;
+    doc["received_bytes"] = static_cast<uint32_t>(receivedBytes);
     String out;
     serializeJson(doc, out);
     sendJson(out);

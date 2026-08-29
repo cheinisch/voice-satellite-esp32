@@ -30,11 +30,14 @@ private:
     void renderDotGrid(uint16_t accent);
     void renderStatusLabels(uint16_t accent);
 
-    void   centered(const String& text, int y, uint16_t color, uint8_t size = 1);
-    void   lineText(const String& text, int x, int y, int maxChars,
-                    uint16_t color, uint8_t size = 1);
-    void   wrappedText(const String& text, int x, int y, int widthChars,
-                       int maxLines, uint16_t color, uint8_t size = 1);
+    int  textWidth(const String& text, const uint8_t* font);
+    void fontText(const String& text, int x, int topY, uint16_t color,
+                  const uint8_t* font);
+    void centeredFont(const String& text, int topY, uint16_t color,
+                      const uint8_t* font);
+    void wrappedFontText(const String& text, int x, int topY, int maxWidth,
+                         int maxLines, uint16_t color, const uint8_t* font,
+                         int lineHeight);
     String compact(const String& text, size_t maxChars) const;
 
     uint16_t stateAccent() const;

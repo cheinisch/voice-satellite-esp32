@@ -40,6 +40,8 @@ private:
     uint32_t ttsResampleAccumulator_ = 0;
     size_t ttsInputBytes_ = 0;
     size_t ttsOutputSamples_ = 0;
+    size_t ttsExpectedBytes_ = 0;
+    uint32_t ttsChunkSequence_ = 0;
 
     void ensureProtocol();
     void setUiState(SatelliteState state, const String& detail = String());

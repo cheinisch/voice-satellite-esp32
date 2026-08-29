@@ -35,3 +35,17 @@ V1 ist absichtlich nicht enthalten, da sie im Projekt nicht getestet werden kann
 | Touch Reset | TCA9554 EXIO1 |
 
 Der erste Bring-up nutzt Arduino_GFX für den ST77916. Falls Waveshare für eine konkrete Fertigungscharge zusätzliche Vendor-Init-Sequenzen benötigt, ist diese Logik ausschließlich in `waveshare_185c_display.cpp` anzupassen; Voice/Core-Code bleibt unverändert.
+
+## Display-Schriften
+
+Die Waveshare-Oberfläche nutzt U8g2-Fonts über die native U8g2-Unterstützung von Arduino_GFX.
+PlatformIO zieht `olikraus/U8g2` über die Board-Library-Abhängigkeit automatisch ein.
+
+Aktuell werden verwendet:
+
+- `u8g2_font_logisoso38_tr` für die Uhr
+- `u8g2_font_helvB10_tf` für Statusbeschriftungen
+- `u8g2_font_helvR08_tf` für sekundäre Beschriftungen und Dialogtext
+- `u8g2_font_helvB08_tf` für kleine Badges
+
+UTF-8-Ausgabe ist aktiviert, damit deutschsprachige Texte inklusive Umlauten sauber dargestellt werden können.

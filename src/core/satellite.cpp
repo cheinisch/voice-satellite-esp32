@@ -249,6 +249,12 @@ void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
                 ttsPlaybackPending_ = true;
                 Serial.printf("Core getrennt nach %u TTS-Bytes; lokale Wiedergabe wird fortgesetzt.\n",
                               static_cast<unsigned>(ttsBufferBytes_));
+                if (ttsExpectedBytes_ > ttsBufferBytes_) {
+                    Serial.printf("TTS UNVOLLSTÄNDIG: erwartet %u, empfangen %u, fehlen %u Bytes.\n",
+                                  static_cast<unsigned>(ttsExpectedBytes_),
+                                  static_cast<unsigned>(ttsBufferBytes_),
+                                  static_cast<unsigned>(ttsExpectedBytes_ - ttsBufferBytes_));
+                }
             } else if (!ttsPlaybackActive_) {
                 if (ttsReceiving_ && ttsBufferBytes_ == 0) {
                     Serial.println("TTS Diagnose: Core trennte vor dem ersten Binär-Callback.");
@@ -282,6 +288,8 @@ void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
             break;
         case VoiceEvent::TtsStart:
             resetTtsPlayback(protocol_.ttsSampleRate(), protocol_.ttsChannels());
+            ttsExpectedBytes_ = protocol_.ttsExpectedBytes();
+            ttsChunkSequence_ = 0;
             if (!allocateTtsBuffer()) {
                 ttsReceiving_ = false;
                 setUiState(SatelliteState::Error, "Kein TTS-Puffer");
@@ -296,10 +304,19 @@ void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
             break;
         case VoiceEvent::TtsEnd:
             ttsReceiving_ = false;
+            if (ttsExpectedBytes_ > 0 && ttsBufferBytes_ != ttsExpectedBytes_) {
+                const size_t missing = ttsExpectedBytes_ > ttsBufferBytes_
+                    ? ttsExpectedBytes_ - ttsBufferBytes_ : 0;
+                Serial.printf("TTS Transferprüfung: erwartet %u, empfangen %u, fehlen %u Bytes.\n",
+                              static_cast<unsigned>(ttsExpectedBytes_),
+                              static_cast<unsigned>(ttsBufferBytes_),
+                              static_cast<unsigned>(missing));
+            }
             if (ttsBufferBytes_ > 0) {
                 ttsPlaybackPending_ = true;
-                Serial.printf("TTS vollständig empfangen: %u Bytes. Wiedergabe startet.\n",
-                              static_cast<unsigned>(ttsBufferBytes_));
+                Serial.printf("TTS vollständig empfangen: %u Bytes in %lu Chunk(s). Wiedergabe startet.\n",
+                              static_cast<unsigned>(ttsBufferBytes_),
+                              static_cast<unsigned long>(ttsChunkSequence_));
             } else {
                 Serial.println("TTS beendet, aber es wurden keine Binärdaten empfangen.");
                 finishTtsPlayback();
@@ -326,6 +343,7 @@ void Satellite::resetTtsPlayback(uint32_t sampleRate, uint8_t channels) {
     ttsResampleAccumulator_ = 0;
     ttsInputBytes_ = 0;
     ttsOutputSamples_ = 0;
+    ttsChunkSequence_ = 0;
     ttsPcmOffset_ = 0;
     ttsPcmEnd_ = 0;
 }
@@ -546,6 +564,8 @@ void Satellite::finishTtsPlayback() {
                   static_cast<unsigned>(ttsOutputSamples_));
 
     freeTtsBuffer();
+    ttsExpectedBytes_ = 0;
+    ttsChunkSequence_ = 0;
     setUiState(protocol_.ready() ? SatelliteState::Ready : SatelliteState::ConnectingCore,
                     protocol_.ready() ? "Bereit" : "Reconnect");
 
@@ -572,8 +592,15 @@ void Satellite::handleTtsBinary(const uint8_t* data, size_t length) {
     }
 
     if (!appendTtsData(data, length)) {
-        Serial.println("TTS: Audiofragment konnte nicht gepuffert werden.");
+        Serial.println("TTS: Audiofragment konnte nicht gepuffert werden; kein ACK wird gesendet.");
         return;
+    }
+
+    ++ttsChunkSequence_;
+    if (protocol_.ttsAckRequired()) {
+        // ACK only after the complete frame is safely in PSRAM. The Core will
+        // not send the next chunk until this acknowledgement arrives.
+        protocol_.sendTtsAck(ttsChunkSequence_, ttsBufferBytes_);
     }
 
     // Keep the WebSocket callback deliberately short. Playback happens later
