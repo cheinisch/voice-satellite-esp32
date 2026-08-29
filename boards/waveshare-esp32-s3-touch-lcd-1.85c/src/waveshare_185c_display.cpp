@@ -1,5 +1,7 @@
 #include "waveshare_185c_display.h"
 #include "waveshare_185c_pins.h"
+#include "jarvis_config.h"
+#include <WiFi.h>
 #include <U8g2lib.h>
 #include <Arduino_GFX_Library.h>
 #include <time.h>
@@ -32,6 +34,35 @@ constexpr int R3      = 73;
 constexpr int DOT_COLS = 7;
 constexpr int DOT_ROWS = 7;
 constexpr int DOT_GAP  = 16;
+
+// Volume controls live together on the right edge.  The visible circles stay
+// compact, but the touch radius is deliberately much larger for reliable use
+// on the small round panel.
+constexpr int VOL_X        = 334;
+constexpr int VOL_UP_Y     = 158;
+constexpr int VOL_DOWN_Y   = 222;
+constexpr int VOL_R        = 18;
+constexpr int VOL_HIT_R    = 34;
+constexpr int VOL_REGION_X = 298;
+constexpr int VOL_REGION_Y = 120;
+constexpr int VOL_REGION_W = 62;
+constexpr int VOL_REGION_H = 140;
+
+// Bottom record/mute actions use the entire lower sector as a hit area.
+// The visual control can stay compact while taps up to ~25 px above the old
+// boundary are still accepted.
+constexpr int ACTION_HIT_TOP = 255;
+constexpr int ACTION_SPLIT_X = 180;
+
+constexpr int NET_X = 278;
+constexpr int NET_Y = 84;
+constexpr int NET_W = 52;
+constexpr int NET_H = 24;
+
+constexpr int POP_X = 43;
+constexpr int POP_Y = 88;
+constexpr int POP_W = 274;
+constexpr int POP_H = 188;
 
 } // namespace
 
@@ -211,6 +242,11 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
         return false;
     }
 
+    const uint8_t rotation = static_cast<uint8_t>(JARVIS_DISPLAY_ROTATION) & 0x03;
+    gfx_->setRotation(rotation);
+    Serial.printf("Display: Rotation=%u (%u Grad).\n",
+                  rotation, static_cast<unsigned>(rotation) * 90U);
+
     gfx_->setUTF8Print(true);
     gfx_->setTextWrap(false);
     Serial.println("Display: U8g2-Fonts + UTF-8 aktiviert.");
@@ -219,6 +255,7 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
     delay(20);
 
     ready_ = true;
+    displayOn_ = true;
     state_ = SatelliteState::Booting;
     detail_ = "";
     renderDashboard();
@@ -227,7 +264,7 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
 }
 
 void Waveshare185CDisplay::loop() {
-    if (!ready_) return;
+    if (!ready_ || !displayOn_) return;
     renderClock(false);
 }
 
@@ -236,7 +273,7 @@ void Waveshare185CDisplay::loop() {
 // ---------------------------------------------------------------------------
 
 void Waveshare185CDisplay::renderClock(bool force) {
-    if (!ready_) return;
+    if (!ready_ || !displayOn_) return;
     if (!force && millis() - lastClockAt_ < 1000) return;
     lastClockAt_ = millis();
 
@@ -306,11 +343,127 @@ void Waveshare185CDisplay::renderStatusLabels(uint16_t accent) {
 }
 
 // ---------------------------------------------------------------------------
+// Edge controls + network popup
+// ---------------------------------------------------------------------------
+
+void Waveshare185CDisplay::renderNetworkButton() {
+    gfx_->fillRoundRect(NET_X, NET_Y, NET_W, NET_H, 8, PANEL_2);
+    gfx_->drawRoundRect(NET_X, NET_Y, NET_W, NET_H, 8, BORDER);
+    fontText("NET", NET_X + 13, NET_Y + 6, CYAN, u8g2_font_helvB08_tf);
+}
+
+void Waveshare185CDisplay::renderVolumeControls(bool partial) {
+    // A volume change should not repaint the complete dashboard.  Clearing
+    // only this right-edge strip prevents the visible full-screen flicker.
+    if (partial) {
+        gfx_->fillRect(VOL_REGION_X, VOL_REGION_Y, VOL_REGION_W, VOL_REGION_H, BG);
+    }
+
+    // Louder (+) above, quieter (-) below: both controls are on one side.
+    gfx_->fillCircle(VOL_X, VOL_UP_Y, VOL_R, PANEL_2);
+    gfx_->drawCircle(VOL_X, VOL_UP_Y, VOL_R, BORDER);
+    gfx_->drawLine(VOL_X - 7, VOL_UP_Y, VOL_X + 7, VOL_UP_Y, TEXT);
+    gfx_->drawLine(VOL_X, VOL_UP_Y - 7, VOL_X, VOL_UP_Y + 7, TEXT);
+
+    gfx_->fillCircle(VOL_X, VOL_DOWN_Y, VOL_R, PANEL_2);
+    gfx_->drawCircle(VOL_X, VOL_DOWN_Y, VOL_R, BORDER);
+    gfx_->drawLine(VOL_X - 7, VOL_DOWN_Y, VOL_X + 7, VOL_DOWN_Y, TEXT);
+
+    // Small centre label between + and -.
+    const String vol = String(volumePercent_) + "%";
+    const int labelW = textWidth(vol, u8g2_font_helvR08_tf);
+    fontText(vol, max(VOL_REGION_X + 2, VOL_X - labelW / 2), 188,
+             MUTED_TXT, u8g2_font_helvR08_tf);
+}
+
+void Waveshare185CDisplay::renderNetworkPopup() {
+    if (!networkPopupVisible_) return;
+
+    gfx_->fillRoundRect(POP_X, POP_Y, POP_W, POP_H, 14, BG);
+    gfx_->drawRoundRect(POP_X, POP_Y, POP_W, POP_H, 14, CYAN);
+    gfx_->drawRoundRect(POP_X + 1, POP_Y + 1, POP_W - 2, POP_H - 2, 13, BORDER);
+
+    fontText("NETZWERK", POP_X + 18, POP_Y + 14, CYAN, u8g2_font_helvB10_tf);
+
+    // Close affordance. The surrounding hit area is deliberately larger than
+    // the visible X so it remains easy to tap on the 1.85" panel.
+    const int closeX = POP_X + POP_W - 28;
+    const int closeY = POP_Y + 20;
+    gfx_->drawLine(closeX - 5, closeY - 5, closeX + 5, closeY + 5, MUTED_TXT);
+    gfx_->drawLine(closeX + 5, closeY - 5, closeX - 5, closeY + 5, MUTED_TXT);
+
+    const bool connected = WiFi.status() == WL_CONNECTED;
+    const String ssid = connected ? WiFi.SSID() : String("nicht verbunden");
+    const String ip = connected ? WiFi.localIP().toString() : String("-");
+    const String gateway = connected ? WiFi.gatewayIP().toString() : String("-");
+    const String dns = connected ? WiFi.dnsIP().toString() : String("-");
+    const String rssi = connected ? String(WiFi.RSSI()) + " dBm" : String("-");
+    const String core = String(JARVIS_CORE_HOST) + ":" + String(JARVIS_CORE_PORT);
+
+    const int labelX = POP_X + 18;
+    const int valueX = POP_X + 78;
+    int y = POP_Y + 46;
+
+    auto row = [&](const char* label, const String& value, uint16_t valueColor) {
+        fontText(label, labelX, y, MUTED_TXT, u8g2_font_helvR08_tf);
+        String shown = value;
+        const int maxValueWidth = POP_X + POP_W - 18 - valueX;
+        while (shown.length() > 3 && textWidth(shown, u8g2_font_helvR08_tf) > maxValueWidth) {
+            shown.remove(shown.length() - 1);
+        }
+        if (shown != value && shown.length() > 3) {
+            while (shown.length() > 3 && textWidth(shown + "...", u8g2_font_helvR08_tf) > maxValueWidth) {
+                shown.remove(shown.length() - 1);
+            }
+            shown += "...";
+        }
+        fontText(shown, valueX, y, valueColor, u8g2_font_helvR08_tf);
+        y += 20;
+    };
+
+    row("WLAN", ssid, TEXT);
+    row("IP", ip, TEXT);
+    row("GW", gateway, TEXT);
+    row("DNS", dns, TEXT);
+    row("RSSI", rssi, connected && WiFi.RSSI() <= -80 ? RED : (connected && WiFi.RSSI() <= -67 ? GOLD : CYAN));
+    row("CORE", core, TEXT);
+}
+
+void Waveshare185CDisplay::toggleNetworkPopup() {
+    if (!ready_ || !displayOn_) return;
+    networkPopupVisible_ = !networkPopupVisible_;
+    renderDashboard();
+}
+
+void Waveshare185CDisplay::setVolumePercent(uint8_t percent) {
+    volumePercent_ = percent > 100 ? 100 : percent;
+    if (ready_ && displayOn_) renderVolumeControls(true);
+}
+
+void Waveshare185CDisplay::setDisplayEnabled(bool enabled) {
+    if (!ready_ || displayOn_ == enabled) return;
+    displayOn_ = enabled;
+    networkPopupVisible_ = false;
+    digitalWrite(waveshare185c::LCD_BL, enabled ? HIGH : LOW);
+    if (enabled) {
+        delay(10);
+        renderDashboard();
+        Serial.println("Display: an.");
+    } else {
+        Serial.println("Display: aus (Backlight). Jarvis bleibt aktiv.");
+    }
+}
+
+void Waveshare185CDisplay::toggleDisplay() {
+    setDisplayEnabled(!displayOn_);
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
 
 void Waveshare185CDisplay::renderDashboard() {
-    if (!ready_) return;
+    if (!ready_ || !displayOn_) return;
     gfx_->fillScreen(BG);
 
     const uint16_t accent = stateAccent();
@@ -324,13 +477,16 @@ void Waveshare185CDisplay::renderDashboard() {
     renderClock(true);
     renderDotGrid(accent);
     renderStatusLabels(accent);
+    renderVolumeControls();
+    renderNetworkButton();
+    if (networkPopupVisible_) renderNetworkPopup();
 }
 
 void Waveshare185CDisplay::showState(SatelliteState state, const String& detail) {
     if (!ready_) return;
     state_ = state;
     detail_ = detail;
-    renderDashboard();
+    if (displayOn_) renderDashboard();
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +504,7 @@ void Waveshare185CDisplay::showTranscript(const String& text) {
     if (!ready_) return;
     state_ = SatelliteState::Processing;
     detail_ = "";
+    if (!displayOn_) return;
     renderDashboard();
 
     // Find narrowest chord over the bubble rows (y 286..348)
@@ -377,6 +534,7 @@ void Waveshare185CDisplay::showAssistant(const String& text) {
     if (!ready_) return;
     state_ = SatelliteState::Speaking;
     detail_ = "";
+    if (!displayOn_) return;
     renderDashboard();
 
     int minHalf = 180;
@@ -406,9 +564,39 @@ void Waveshare185CDisplay::showAssistant(const String& text) {
 // ---------------------------------------------------------------------------
 
 bool Waveshare185CDisplay::hitRecordButton(uint16_t x, uint16_t y) const {
-    return y >= 280 && x < 180;
+    // Large lower-left hit sector.  This is intentionally larger than the
+    // visible action control so a slightly imprecise tap still records.
+    return y >= ACTION_HIT_TOP && x < ACTION_SPLIT_X;
 }
 
 bool Waveshare185CDisplay::hitMuteButton(uint16_t x, uint16_t y) const {
-    return y >= 280 && x >= 180;
+    // Large lower-right hit sector for STUMM/ZUHOEREN.
+    return y >= ACTION_HIT_TOP && x >= ACTION_SPLIT_X;
 }
+
+bool Waveshare185CDisplay::hitNetworkButton(uint16_t x, uint16_t y) const {
+    constexpr int pad = 12;
+    const int px = static_cast<int>(x);
+    const int py = static_cast<int>(y);
+    return px >= NET_X - pad && px <= NET_X + NET_W + pad &&
+           py >= NET_Y - pad && py <= NET_Y + NET_H + pad;
+}
+
+bool Waveshare185CDisplay::hitNetworkCloseButton(uint16_t x, uint16_t y) const {
+    if (!networkPopupVisible_) return false;
+    return x >= POP_X + POP_W - 52 && x <= POP_X + POP_W &&
+           y >= POP_Y && y <= POP_Y + 52;
+}
+
+bool Waveshare185CDisplay::hitVolumeDown(uint16_t x, uint16_t y) const {
+    const int dx = static_cast<int>(x) - VOL_X;
+    const int dy = static_cast<int>(y) - VOL_DOWN_Y;
+    return dx * dx + dy * dy <= VOL_HIT_R * VOL_HIT_R;
+}
+
+bool Waveshare185CDisplay::hitVolumeUp(uint16_t x, uint16_t y) const {
+    const int dx = static_cast<int>(x) - VOL_X;
+    const int dy = static_cast<int>(y) - VOL_UP_Y;
+    return dx * dx + dy * dy <= VOL_HIT_R * VOL_HIT_R;
+}
+

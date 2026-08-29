@@ -18,6 +18,13 @@ private:
     bool protocolStarted_ = false;
     bool recording_ = false;
     bool muted_ = false;
+    bool recordingAutoTts_ = true;
+    bool awaitingResponse_ = false;
+    bool wakeWordEnabled_ = false;
+    bool wakeWordSuspended_ = false;
+    bool silenceSpeechSeen_ = false;
+    uint32_t silenceVoicedSamples_ = 0;
+    uint32_t silenceLastVoiceAt_ = 0;
     uint32_t recordingStartedAt_ = 0;
     uint32_t lastStatusAt_ = 0;
     String serialCommand_;
@@ -46,6 +53,8 @@ private:
     void ensureProtocol();
     void setUiState(SatelliteState state, const String& detail = String());
     void toggleMute();
+    void suspendWakeWord();
+    void resumeWakeWordIfIdle();
     void startRecording(bool autoTts = true);
     void stopRecording();
     void pumpRecording();

@@ -37,6 +37,33 @@
 #ifndef JARVIS_RECORD_MS
 #define JARVIS_RECORD_MS 8000
 #endif
+
+// Optional local end-of-speech detection. Recording always stops at
+// JARVIS_RECORD_MS even when no speech/silence transition was detected.
+#ifndef JARVIS_SILENCE_DETECTION
+#define JARVIS_SILENCE_DETECTION 0
+#endif
+#ifndef JARVIS_SILENCE_THRESHOLD
+#define JARVIS_SILENCE_THRESHOLD 500
+#endif
+#ifndef JARVIS_SILENCE_TIMEOUT_MS
+#define JARVIS_SILENCE_TIMEOUT_MS 900
+#endif
+#ifndef JARVIS_SILENCE_MIN_SPEECH_MS
+#define JARVIS_SILENCE_MIN_SPEECH_MS 250
+#endif
+#ifndef JARVIS_SILENCE_ARM_MS
+#define JARVIS_SILENCE_ARM_MS 300
+#endif
+
+// ESP32-S3 WakeNet test wake word. The first implementation intentionally
+// uses Espressif's bundled "Hi ESP" model (wn9_hiesp).
+#ifndef JARVIS_WAKEWORD_ENABLED
+#define JARVIS_WAKEWORD_ENABLED 0
+#endif
+#ifndef JARVIS_WAKEWORD_NAME
+#define JARVIS_WAKEWORD_NAME "Hi ESP"
+#endif
 #ifndef JARVIS_AUDIO_RATE
 #define JARVIS_AUDIO_RATE 16000
 #endif
@@ -58,6 +85,14 @@
 #define JARVIS_TTS_QUALITY "low"
 #endif
 
+
+// Display rotation for boards with a screen. Values follow Arduino_GFX:
+//   0 = default, 1 = 90 degrees clockwise,
+//   2 = 180 degrees, 3 = 270 degrees clockwise.
+// The Waveshare CST816 touch coordinates are rotated with the display.
+#ifndef JARVIS_DISPLAY_ROTATION
+#define JARVIS_DISPLAY_ROTATION 0
+#endif
 
 #ifndef JARVIS_NTP_SERVER
 #define JARVIS_NTP_SERVER "pool.ntp.org"

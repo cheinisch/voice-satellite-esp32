@@ -47,11 +47,33 @@ void Satellite::setUiState(SatelliteState state, const String& detail) {
     board_.setState(state, detail);
 }
 
+void Satellite::suspendWakeWord() {
+    if (!wakeWordEnabled_ || wakeWordSuspended_) return;
+    board_.audio().pauseWakeWord();
+    wakeWordSuspended_ = true;
+    // ESP_SR pauses its feed/detect tasks asynchronously via an event group.
+    // Give the feed task one audio frame to release the shared I2S reader
+    // before Jarvis starts direct recording or switches the bus to TX.
+    delay(20);
+}
+
+void Satellite::resumeWakeWordIfIdle() {
+    if (!wakeWordEnabled_ || !wakeWordSuspended_ || muted_) return;
+    if (recording_ || awaitingResponse_ || ttsReceiving_ || ttsPlaybackPending_ || ttsPlaybackActive_) return;
+    board_.audio().resumeWakeWord();
+    wakeWordSuspended_ = false;
+    if (protocol_.ready()) {
+        setUiState(SatelliteState::Ready, String("Wakeword: ") + board_.audio().wakeWordName());
+    }
+}
+
 void Satellite::toggleMute() {
     muted_ = !muted_;
     if (muted_) {
+        suspendWakeWord();
         if (recording_) {
             recording_ = false;
+            awaitingResponse_ = false;
             freeRecordingBuffer();
             Serial.println("Stumm: laufende Aufnahme lokal verworfen.");
         }
@@ -61,6 +83,7 @@ void Satellite::toggleMute() {
         setUiState(protocol_.ready() ? SatelliteState::Ready : SatelliteState::ConnectingCore,
                    protocol_.ready() ? "Bereit" : "Reconnect");
         Serial.println("Mikrofon hört wieder zu.");
+        resumeWakeWordIfIdle();
     }
 }
 
@@ -71,6 +94,19 @@ bool Satellite::begin() {
         setUiState(SatelliteState::Error, "Board-Initialisierung fehlgeschlagen");
         Serial.println("WARNUNG: Board-Initialisierung unvollständig; Netzwerk/Protokoll bleiben für Diagnose aktiv.");
     }
+
+#if JARVIS_WAKEWORD_ENABLED
+    if (boardOk) {
+        wakeWordEnabled_ = board_.audio().beginWakeWord();
+        wakeWordSuspended_ = false;
+        if (wakeWordEnabled_) {
+            Serial.printf("Wakeword bereit: '%s'. Audio bleibt lokal bis zur Erkennung.\n",
+                          board_.audio().wakeWordName());
+        } else {
+            Serial.println("Wakeword angefordert, aber auf diesem Board nicht verfügbar/initialisierbar.");
+        }
+    }
+#endif
 
     protocol_.setBinaryHandler([this](const uint8_t* data, size_t length) {
         handleTtsBinary(data, length);
@@ -156,7 +192,13 @@ void Satellite::startRecording(bool autoTts) {
         return;
     }
     if (recording_ || !protocol_.ready()) return;
+
+    // WakeNet consumes the same ES7210/I2S RX stream while idle. Pause it
+    // before the normal recorder starts reading from I2S.
+    suspendWakeWord();
+
     if (!allocateRecordingBuffer()) {
+        resumeWakeWordIfIdle();
         if (sttTestActive_) sttTestActive_ = false;
         setUiState(SatelliteState::Error, "Kein Audiopuffer");
         return;
@@ -165,7 +207,12 @@ void Satellite::startRecording(bool autoTts) {
     board_.audio().clearOutput();
     protocol_.sendSessionStart(autoTts);
     recording_ = true;
+    recordingAutoTts_ = autoTts;
+    awaitingResponse_ = false;
     recordingStartedAt_ = millis();
+    silenceSpeechSeen_ = false;
+    silenceVoicedSamples_ = 0;
+    silenceLastVoiceAt_ = recordingStartedAt_;
     setUiState(SatelliteState::Listening, "Sprich jetzt");
     if (ttsTestActive_) {
         Serial.println();
@@ -176,9 +223,10 @@ void Satellite::startRecording(bool autoTts) {
         Serial.println("=== STT TEST ===");
         Serial.println("Sprich jetzt in das Mikrofon. Dieser Test fordert absichtlich kein TTS an.");
     }
-    Serial.printf("Aufnahme läuft (%lus, auto_tts=%s)...\n",
-                  static_cast<unsigned long>(JARVIS_RECORD_MS / 1000),
-                  autoTts ? "ja" : "nein");
+    Serial.printf("Aufnahme läuft (max. %lums, auto_tts=%s, silence=%s)...\n",
+                  static_cast<unsigned long>(JARVIS_RECORD_MS),
+                  autoTts ? "ja" : "nein",
+                  JARVIS_SILENCE_DETECTION ? "ja" : "nein");
 }
 
 void Satellite::stopRecording() {
@@ -188,8 +236,10 @@ void Satellite::stopRecording() {
     if (!recordingBuffer_ || recordingPcmBytes_ == 0) {
         Serial.println("STT: Keine Audiodaten aufgenommen.");
         freeRecordingBuffer();
+        awaitingResponse_ = false;
         setUiState(SatelliteState::Ready, "Bereit");
         if (sttTestActive_) sttTestActive_ = false;
+        resumeWakeWordIfIdle();
         return;
     }
 
@@ -202,12 +252,15 @@ void Satellite::stopRecording() {
     if (!protocol_.sendWav(recordingBuffer_, wavBytes)) {
         Serial.println("STT: WAV konnte nicht gesendet werden.");
         freeRecordingBuffer();
+        awaitingResponse_ = false;
         setUiState(SatelliteState::Error, "Audio senden fehlgeschlagen");
         if (sttTestActive_) sttTestActive_ = false;
+        resumeWakeWordIfIdle();
         return;
     }
 
     protocol_.sendAudioCommit();
+    awaitingResponse_ = true;
     Serial.println("Sende Daten an Jarvis");
     freeRecordingBuffer();
     setUiState(SatelliteState::Processing, "Sende Daten an Jarvis");
@@ -225,6 +278,36 @@ void Satellite::pumpRecording() {
             memcpy(recordingBuffer_ + WAV_HEADER_BYTES + recordingPcmBytes_, audioChunk, copyBytes);
             recordingPcmBytes_ += copyBytes;
         }
+
+#if JARVIS_SILENCE_DETECTION
+        const uint32_t now = millis();
+        if (now - recordingStartedAt_ >= JARVIS_SILENCE_ARM_MS) {
+            uint64_t sumAbs = 0;
+            for (size_t n = 0; n < got; ++n) {
+                const int32_t sample = audioChunk[n];
+                sumAbs += static_cast<uint32_t>(sample < 0 ? -sample : sample);
+            }
+            const uint32_t meanAbs = got ? static_cast<uint32_t>(sumAbs / got) : 0;
+            if (meanAbs >= JARVIS_SILENCE_THRESHOLD) {
+                silenceSpeechSeen_ = true;
+                silenceVoicedSamples_ += static_cast<uint32_t>(got);
+                silenceLastVoiceAt_ = now;
+            }
+
+            const uint32_t voicedMs = static_cast<uint32_t>(
+                (static_cast<uint64_t>(silenceVoicedSamples_) * 1000ULL) / JARVIS_AUDIO_RATE);
+            if (silenceSpeechSeen_ &&
+                voicedMs >= JARVIS_SILENCE_MIN_SPEECH_MS &&
+                now - silenceLastVoiceAt_ >= JARVIS_SILENCE_TIMEOUT_MS) {
+                Serial.printf("Silence Detection: %lums Stille nach %lums Sprache -> Aufnahme Ende.\n",
+                              static_cast<unsigned long>(now - silenceLastVoiceAt_),
+                              static_cast<unsigned long>(voicedMs));
+                stopRecording();
+                return;
+            }
+        }
+#endif
+
         if (copyBytes < bytes || WAV_HEADER_BYTES + recordingPcmBytes_ >= recordingCapacityBytes_) {
             stopRecording();
             return;
@@ -256,6 +339,7 @@ void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
                                   static_cast<unsigned>(ttsExpectedBytes_ - ttsBufferBytes_));
                 }
             } else if (!ttsPlaybackActive_) {
+                awaitingResponse_ = false;
                 if (ttsReceiving_ && ttsBufferBytes_ == 0) {
                     Serial.println("TTS Diagnose: Core trennte vor dem ersten Binär-Callback.");
                     Serial.println("TTS Diagnose: arduinoWebSockets begrenzt eingehende Frames standardmäßig auf 15 KiB;");
@@ -269,9 +353,14 @@ void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
             break;
         case VoiceEvent::Ready:
             setUiState(SatelliteState::Ready, "Bereit");
+            resumeWakeWordIfIdle();
             break;
         case VoiceEvent::Transcript:
             board_.showTranscript(text);
+            if (!recordingAutoTts_) {
+                awaitingResponse_ = false;
+                resumeWakeWordIfIdle();
+            }
             if (ttsTestActive_) {
                 Serial.printf("TTS Test - STT erkannt: %s\n", text.c_str());
             } else if (sttTestActive_) {
@@ -331,7 +420,9 @@ void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
                 Serial.printf("TTS Test fehlgeschlagen: %s\n", text.c_str());
                 ttsTestActive_ = false;
             }
+            awaitingResponse_ = false;
             setUiState(SatelliteState::Error, text);
+            resumeWakeWordIfIdle();
             break;
     }
 }
@@ -566,8 +657,10 @@ void Satellite::finishTtsPlayback() {
     freeTtsBuffer();
     ttsExpectedBytes_ = 0;
     ttsChunkSequence_ = 0;
+    awaitingResponse_ = false;
     setUiState(protocol_.ready() ? SatelliteState::Ready : SatelliteState::ConnectingCore,
                     protocol_.ready() ? "Bereit" : "Reconnect");
+    resumeWakeWordIfIdle();
 
     if (ttsTestActive_) {
         Serial.println(hadAudio
@@ -617,6 +710,7 @@ void Satellite::runSpeakerTest() {
         return;
     }
 
+    suspendWakeWord();
     Serial.println();
     Serial.println("=== SPEAKER TEST ===");
     Serial.println("Spiele 1 kHz Testton für 1 Sekunde ...");
@@ -660,6 +754,7 @@ void Satellite::runSpeakerTest() {
     }
     Serial.println("====================");
     Serial.println();
+    resumeWakeWordIfIdle();
 }
 
 void Satellite::runMicTest() {
@@ -668,6 +763,7 @@ void Satellite::runMicTest() {
         return;
     }
 
+    suspendWakeWord();
     Serial.println();
     Serial.println("=== MIC TEST ===");
     Serial.println("Lese 2 Sekunden direkt vom Board-Audioeingang ...");
@@ -715,15 +811,17 @@ void Satellite::runMicTest() {
     }
     Serial.println("================");
     Serial.println();
+    resumeWakeWordIfIdle();
 }
 
 void Satellite::printStatus() const {
-    Serial.printf("Status: WLAN=%s Core=%s Ready=%s Aufnahme=%s Mute=%s Heap=%u PSRAM=%u\n",
+    Serial.printf("Status: WLAN=%s Core=%s Ready=%s Aufnahme=%s Mute=%s Wake=%s Heap=%u PSRAM=%u\n",
                   wifi_.connected() ? "OK" : "OFF",
                   protocol_.connected() ? "OK" : "OFF",
                   protocol_.ready() ? "ja" : "nein",
                   recording_ ? "ja" : "nein",
                   muted_ ? "ja" : "nein",
+                  wakeWordEnabled_ ? (wakeWordSuspended_ ? "pause" : "an") : "aus",
                   ESP.getFreeHeap(),
                   ESP.getFreePsram());
 }
@@ -737,6 +835,7 @@ void Satellite::printConsoleHelp() const {
     Serial.println("  tts        + ENTER  -> kompletter STT -> Jarvis -> TTS Roundtrip");
     Serial.println("  stop       + ENTER  -> Aufnahme vorzeitig beenden");
     Serial.println("  mute       + ENTER  -> Mikrofon stumm / zuhören umschalten");
+    Serial.println("  wake       + ENTER  -> Wakeword-Status anzeigen");
     Serial.println("  status + ENTER  -> Verbindungsstatus anzeigen");
     Serial.println("  help   + ENTER  -> diese Hilfe anzeigen");
     Serial.println();
@@ -786,6 +885,10 @@ void Satellite::pollSerialConsole() {
             else Serial.println("Keine Aufnahme aktiv.");
         } else if (serialCommand_ == "mute" || serialCommand_ == "unmute") {
             toggleMute();
+        } else if (serialCommand_ == "wake") {
+            Serial.printf("Wakeword: %s%s\n",
+                          wakeWordEnabled_ ? board_.audio().wakeWordName() : "aus",
+                          wakeWordEnabled_ && wakeWordSuspended_ ? " (pausiert)" : "");
         } else if (serialCommand_ == "status") {
             printStatus();
         } else if (serialCommand_ == "help" || serialCommand_ == "?") {
@@ -808,6 +911,25 @@ void Satellite::loop() {
     if (protocolStarted_) protocol_.loop();
 
     if (board_.consumeMuteToggle()) toggleMute();
+
+    if (wakeWordEnabled_ && board_.audio().consumeWakeWordTrigger()) {
+        wakeWordSuspended_ = true; // callback pauses ESP_SR before handing over I2S
+        if (muted_) {
+            Serial.println("Wakeword erkannt, aber Mikrofon ist stumm.");
+        } else if (!protocol_.ready()) {
+            Serial.println("Wakeword erkannt, aber Jarvis Core ist nicht bereit.");
+            awaitingResponse_ = false;
+            resumeWakeWordIfIdle();
+        } else if (recording_ || awaitingResponse_ || ttsReceiving_ || ttsPlaybackActive_) {
+            Serial.println("Wakeword ignoriert: Sprachrunde läuft bereits.");
+        } else {
+            Serial.printf("Wakeword erkannt: %s\n", board_.audio().wakeWordName());
+            // The ESP_SR callback has already requested PAUSE_FEED. Allow the
+            // background feed task to stop reading the shared I2S stream.
+            delay(20);
+            startRecording(JARVIS_AUTO_TTS != 0);
+        }
+    }
 
     if (board_.consumeVoiceTrigger()) {
         if (recording_) stopRecording();

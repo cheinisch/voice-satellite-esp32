@@ -38,9 +38,12 @@ bool Waveshare185CBoard::begin() {
 
     Serial.println("Waveshare Init: Audio/Mikrofon OK");
     pinMode(waveshare185c::BOOT_BUTTON, INPUT_PULLUP);
+    display_.setVolumePercent(audio_.volume());
     display_.showState(SatelliteState::Ready, "Bereit");
-    Serial.println("Waveshare 1.85C V2: Display-Button AUFNEHMEN oder BOOT = sprechen/stoppen");
-    Serial.println("Waveshare 1.85C V2: Display-Button STUMM/ZUHOEREN = Mikrofon umschalten");
+    Serial.println("Waveshare 1.85C V2: Touch AUFNEHMEN = sprechen/stoppen");
+    Serial.println("Waveshare 1.85C V2: Touch STUMM/ZUHOEREN = Mikrofon umschalten");
+    Serial.println("Waveshare 1.85C V2: Touch +/- rechts = Lautstaerke, NET = Netzwerkdetails");
+    Serial.println("Waveshare 1.85C V2: BOOT = Display an/aus; RESET bleibt Hardware-Reset");
     return true;
 }
 
@@ -48,10 +51,29 @@ void Waveshare185CBoard::loop() {
     display_.loop();
 
     Waveshare185CTouchPoint point;
-    if (touch_.consumeTap(point)) {
+    if (display_.displayEnabled() && touch_.consumeTap(point)) {
         Serial.printf("Touch: x=%u y=%u\n", point.x, point.y);
-        if (display_.hitMuteButton(point.x, point.y)) muteToggle_ = true;
-        else if (display_.hitRecordButton(point.x, point.y)) trigger_ = true;
+
+        if (display_.networkPopupVisible()) {
+            if (display_.hitNetworkCloseButton(point.x, point.y) ||
+                display_.hitNetworkButton(point.x, point.y)) {
+                display_.toggleNetworkPopup();
+            }
+        } else if (display_.hitNetworkButton(point.x, point.y)) {
+            display_.toggleNetworkPopup();
+        } else if (display_.hitVolumeDown(point.x, point.y)) {
+            const uint8_t current = audio_.volume();
+            const uint8_t next = current <= 10 ? 0 : static_cast<uint8_t>(current - 10);
+            if (audio_.setVolume(next)) display_.setVolumePercent(next);
+        } else if (display_.hitVolumeUp(point.x, point.y)) {
+            const uint8_t current = audio_.volume();
+            const uint8_t next = current >= 90 ? 100 : static_cast<uint8_t>(current + 10);
+            if (audio_.setVolume(next)) display_.setVolumePercent(next);
+        } else if (display_.hitMuteButton(point.x, point.y)) {
+            muteToggle_ = true;
+        } else if (display_.hitRecordButton(point.x, point.y)) {
+            trigger_ = true;
+        }
     }
 
     const bool pressed = digitalRead(waveshare185c::BOOT_BUTTON) == LOW;
@@ -59,7 +81,10 @@ void Waveshare185CBoard::loop() {
     if (pressed != lastBoot_ && now - lastBootEdgeAt_ > 30) {
         lastBootEdgeAt_ = now;
         lastBoot_ = pressed;
-        if (pressed) trigger_ = true;
+        if (pressed) {
+            display_.toggleDisplay();
+            Serial.printf("BOOT: Display %s.\n", display_.displayEnabled() ? "an" : "aus");
+        }
     }
 }
 

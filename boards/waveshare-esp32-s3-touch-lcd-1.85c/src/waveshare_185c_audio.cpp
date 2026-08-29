@@ -6,6 +6,10 @@
 #include <AudioBoard.h>
 #include <algorithm>
 
+#if JARVIS_WAKEWORD_ENABLED
+#include <ESP_SR.h>
+#endif
+
 using namespace audio_driver;
 
 namespace {
@@ -123,6 +127,19 @@ bool initEs7210Waveshare() {
     return true;
 }
 
+#if JARVIS_WAKEWORD_ENABLED
+Waveshare185CAudio* wakeWordOwner = nullptr;
+
+void onWakeWordEvent(sr_event_t event, int commandId, int phraseId) {
+    (void)commandId;
+    (void)phraseId;
+    if (!wakeWordOwner) return;
+    if (event == SR_EVENT_WAKEWORD || event == SR_EVENT_WAKEWORD_CHANNEL) {
+        wakeWordOwner->markWakeWordDetected();
+    }
+}
+#endif
+
 } // namespace
 
 struct Waveshare185CAudio::Impl {
@@ -137,10 +154,20 @@ struct Waveshare185CAudio::Impl {
     bool speakerStarted = false;
     bool playbackMode = false;
     bool speakerPinsConfigured = false;
+    bool wakeWordStarted = false;
+    bool wakeWordPaused = false;
+    volatile bool wakeWordDetected = false;
+    uint8_t desiredVolume = static_cast<uint8_t>(std::clamp<int>(JARVIS_WAVESHARE_SPEAKER_VOLUME, 0, 100));
 };
 
 Waveshare185CAudio::Waveshare185CAudio() : impl_(new Impl()) {}
-Waveshare185CAudio::~Waveshare185CAudio() { delete impl_; }
+Waveshare185CAudio::~Waveshare185CAudio() {
+#if JARVIS_WAKEWORD_ENABLED
+    if (impl_ && impl_->wakeWordStarted) ESP_SR.end();
+    if (wakeWordOwner == this) wakeWordOwner = nullptr;
+#endif
+    delete impl_;
+}
 
 bool Waveshare185CAudio::startMicI2s() {
     auto& i = *impl_;
@@ -278,6 +305,96 @@ bool Waveshare185CAudio::begin() {
     return true;
 }
 
+bool Waveshare185CAudio::beginWakeWord() {
+#if JARVIS_WAKEWORD_ENABLED
+    auto& i = *impl_;
+    if (i.wakeWordStarted) return true;
+    if (!i.micStarted && !restoreMicPath()) {
+        Serial.println("WakeNet: Mikrofonpfad ist nicht bereit.");
+        return false;
+    }
+
+    wakeWordOwner = this;
+    i.wakeWordDetected = false;
+    ESP_SR.onEvent(onWakeWordEvent);
+
+    // The ES7210 delivers two 16-bit microphone channels at 16 kHz. WakeNet
+    // therefore receives a stereo MM stream directly from the existing I2S
+    // instance; it does not open a second hardware I2S controller.
+    if (!ESP_SR.begin(i.i2s, nullptr, 0, SR_CHANNELS_STEREO, SR_MODE_WAKEWORD, "MM")) {
+        Serial.println("WakeNet: ESP_SR konnte nicht gestartet werden. Ist srmodels.bin geflasht?");
+        wakeWordOwner = nullptr;
+        return false;
+    }
+
+    i.wakeWordStarted = true;
+    i.wakeWordPaused = false;
+    Serial.printf("WakeNet aktiv: Wakeword '%s' (lokal auf ESP32-S3).\n", JARVIS_WAKEWORD_NAME);
+    return true;
+#else
+    return false;
+#endif
+}
+
+void Waveshare185CAudio::markWakeWordDetected() {
+#if JARVIS_WAKEWORD_ENABLED
+    if (!impl_ || !impl_->wakeWordStarted) return;
+    if (impl_->wakeWordDetected) return;
+    impl_->wakeWordDetected = true;
+    pauseWakeWord();
+#endif
+}
+
+void Waveshare185CAudio::pauseWakeWord() {
+#if JARVIS_WAKEWORD_ENABLED
+    auto& i = *impl_;
+    if (!i.wakeWordStarted || i.wakeWordPaused) return;
+    if (ESP_SR.pause()) {
+        i.wakeWordPaused = true;
+    } else {
+        Serial.println("WakeNet Warnung: Pause fehlgeschlagen.");
+    }
+#endif
+}
+
+void Waveshare185CAudio::resumeWakeWord() {
+#if JARVIS_WAKEWORD_ENABLED
+    auto& i = *impl_;
+    if (!i.wakeWordStarted) return;
+    i.wakeWordDetected = false;
+    ESP_SR.setMode(SR_MODE_WAKEWORD);
+    if (i.wakeWordPaused) {
+        if (ESP_SR.resume()) {
+            i.wakeWordPaused = false;
+        } else {
+            Serial.println("WakeNet Warnung: Resume fehlgeschlagen.");
+        }
+    }
+#endif
+}
+
+bool Waveshare185CAudio::consumeWakeWordTrigger() {
+#if JARVIS_WAKEWORD_ENABLED
+    if (!impl_ || !impl_->wakeWordDetected) return false;
+    impl_->wakeWordDetected = false;
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool Waveshare185CAudio::wakeWordActive() const {
+#if JARVIS_WAKEWORD_ENABLED
+    return impl_ && impl_->wakeWordStarted;
+#else
+    return false;
+#endif
+}
+
+const char* Waveshare185CAudio::wakeWordName() const {
+    return JARVIS_WAKEWORD_NAME;
+}
+
 bool Waveshare185CAudio::ensureSpeaker() {
     auto& i = *impl_;
 
@@ -315,11 +432,11 @@ bool Waveshare185CAudio::ensureSpeaker() {
             return false;
         }
 
-        if (!i.speakerBoard.setVolume(JARVIS_WAVESHARE_SPEAKER_VOLUME)) {
+        if (!i.speakerBoard.setVolume(i.desiredVolume)) {
             Serial.println("ES8311 Warnung: Lautstaerke konnte nicht gesetzt werden.");
         }
         i.speakerStarted = true;
-        Serial.printf("ES8311/Lautsprecher-Codec bereit, Volume=%d%%.\n", JARVIS_WAVESHARE_SPEAKER_VOLUME);
+        Serial.printf("ES8311/Lautsprecher-Codec bereit, Volume=%u%%.\n", static_cast<unsigned>(i.desiredVolume));
     }
 
     if (!i.playbackMode) {
@@ -401,6 +518,31 @@ size_t Waveshare185CAudio::writePcm16(const int16_t* src, size_t samples, uint32
         return 0;
     }
     return bytesWritten / sizeof(int16_t);
+}
+
+
+bool Waveshare185CAudio::setVolume(uint8_t percent) {
+    auto& i = *impl_;
+    const uint8_t next = static_cast<uint8_t>(std::clamp<int>(percent, 0, 100));
+    i.desiredVolume = next;
+
+    // The speaker codec is initialized lazily. Before the first TTS playback
+    // simply remember the requested value; ensureSpeaker() applies it later.
+    if (!i.speakerStarted) {
+        Serial.printf("Lautstaerke vorgemerkt: %u%%.\n", static_cast<unsigned>(next));
+        return true;
+    }
+
+    if (!i.speakerBoard.setVolume(next)) {
+        Serial.printf("ES8311: Lautstaerke %u%% konnte nicht gesetzt werden.\n", static_cast<unsigned>(next));
+        return false;
+    }
+    Serial.printf("Lautstaerke: %u%%.\n", static_cast<unsigned>(next));
+    return true;
+}
+
+uint8_t Waveshare185CAudio::volume() const {
+    return impl_ ? impl_->desiredVolume : static_cast<uint8_t>(JARVIS_WAVESHARE_SPEAKER_VOLUME);
 }
 
 void Waveshare185CAudio::clearOutput() {

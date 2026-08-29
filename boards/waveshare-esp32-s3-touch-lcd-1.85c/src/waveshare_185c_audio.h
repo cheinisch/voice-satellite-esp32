@@ -9,6 +9,17 @@ public:
     size_t readPcm16(int16_t* dst, size_t samples, uint32_t timeoutMs) override;
     size_t writePcm16(const int16_t* src, size_t samples, uint32_t timeoutMs) override;
     void clearOutput() override;
+    bool beginWakeWord() override;
+    void pauseWakeWord() override;
+    void resumeWakeWord() override;
+    bool consumeWakeWordTrigger() override;
+    bool wakeWordActive() const override;
+    const char* wakeWordName() const override;
+    bool setVolume(uint8_t percent);
+    uint8_t volume() const;
+
+    // Internal callback bridge used by Arduino ESP_SR.
+    void markWakeWordDetected();
 private:
     struct Impl;
     Impl* impl_;

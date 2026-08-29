@@ -43,6 +43,27 @@ void Waveshare185CTouch::transform(uint16_t& x, uint16_t& y) const {
 #endif
     if (x > TOUCH_MAX) x = TOUCH_MAX;
     if (y > TOUCH_MAX) y = TOUCH_MAX;
+
+    // Keep the touch coordinate system aligned with Arduino_GFX setRotation().
+    // Hardware-specific swap/invert corrections above are applied first.
+    const uint16_t rawX = x;
+    const uint16_t rawY = y;
+    switch (static_cast<uint8_t>(JARVIS_DISPLAY_ROTATION) & 0x03) {
+        case 1:
+            x = TOUCH_MAX - rawY;
+            y = rawX;
+            break;
+        case 2:
+            x = TOUCH_MAX - rawX;
+            y = TOUCH_MAX - rawY;
+            break;
+        case 3:
+            x = rawY;
+            y = TOUCH_MAX - rawX;
+            break;
+        default:
+            break;
+    }
 }
 
 bool Waveshare185CTouch::consumeTap() {

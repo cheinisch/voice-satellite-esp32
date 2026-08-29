@@ -15,6 +15,16 @@ public:
     void showAssistant(const String& text);
     bool hitRecordButton(uint16_t x, uint16_t y) const;
     bool hitMuteButton(uint16_t x, uint16_t y) const;
+    bool hitNetworkButton(uint16_t x, uint16_t y) const;
+    bool hitNetworkCloseButton(uint16_t x, uint16_t y) const;
+    bool hitVolumeDown(uint16_t x, uint16_t y) const;
+    bool hitVolumeUp(uint16_t x, uint16_t y) const;
+    void toggleNetworkPopup();
+    bool networkPopupVisible() const { return networkPopupVisible_; }
+    void setVolumePercent(uint8_t percent);
+    void toggleDisplay();
+    void setDisplayEnabled(bool enabled);
+    bool displayEnabled() const { return displayOn_; }
 
 private:
     Arduino_DataBus* bus_        = nullptr;
@@ -24,11 +34,17 @@ private:
     String           detail_;
     uint32_t         lastClockAt_ = 0;
     int              lastMinute_  = -1;
+    bool             displayOn_ = true;
+    bool             networkPopupVisible_ = false;
+    uint8_t          volumePercent_ = 70;
 
     void renderDashboard();
     void renderClock(bool force = false);
     void renderDotGrid(uint16_t accent);
     void renderStatusLabels(uint16_t accent);
+    void renderNetworkButton();
+    void renderVolumeControls(bool partial = false);
+    void renderNetworkPopup();
 
     int  textWidth(const String& text, const uint8_t* font);
     void fontText(const String& text, int x, int topY, uint16_t color,
