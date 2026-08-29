@@ -27,4 +27,5 @@ private:
     bool muteToggle_ = false;
     bool lastBoot_ = false;
     uint32_t lastBootEdgeAt_ = 0;
+    uint32_t lastVolumeActionAt_ = 0;
 };

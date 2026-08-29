@@ -13,8 +13,8 @@ public:
     void showState(SatelliteState state, const String& detail);
     void showTranscript(const String& text);
     void showAssistant(const String& text);
-    bool hitRecordButton(uint16_t x, uint16_t y) const;
-    bool hitMuteButton(uint16_t x, uint16_t y) const;
+    bool hitCenterRecordButton(uint16_t x, uint16_t y) const;
+    bool hitMicButton(uint16_t x, uint16_t y) const;
     bool hitNetworkButton(uint16_t x, uint16_t y) const;
     bool hitNetworkCloseButton(uint16_t x, uint16_t y) const;
     bool hitVolumeDown(uint16_t x, uint16_t y) const;
@@ -36,12 +36,16 @@ private:
     int              lastMinute_  = -1;
     bool             displayOn_ = true;
     bool             networkPopupVisible_ = false;
+    bool             messageBubbleVisible_ = false;
     uint8_t          volumePercent_ = 70;
 
     void renderDashboard();
+    void renderCenterState(bool updateMic = false);
+    void clearMessageArea();
     void renderClock(bool force = false);
     void renderDotGrid(uint16_t accent);
     void renderStatusLabels(uint16_t accent);
+    void renderMicControl();
     void renderNetworkButton();
     void renderVolumeControls(bool partial = false);
     void renderNetworkPopup();

@@ -48,7 +48,7 @@ void Waveshare185CTouch::transform(uint16_t& x, uint16_t& y) const {
     // Hardware-specific swap/invert corrections above are applied first.
     const uint16_t rawX = x;
     const uint16_t rawY = y;
-    switch (static_cast<uint8_t>(JARVIS_DISPLAY_ROTATION) & 0x03) {
+    switch (static_cast<uint8_t>(JARVIS_DISPLAY_ROTATION_INDEX)) {
         case 1:
             x = TOUCH_MAX - rawY;
             y = rawX;

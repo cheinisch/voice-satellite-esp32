@@ -51,12 +51,13 @@
 #define JARVIS_WAVESHARE_SPEAKER_VOLUME 70
 #define JARVIS_WAVESHARE_MIC_GAIN       70
 
-// Optional: Display drehen.
-//   0 = Standard
-//   1 = 90 Grad im Uhrzeigersinn
-//   2 = 180 Grad
-//   3 = 270 Grad im Uhrzeigersinn
-// Beim Waveshare werden die Touch-Koordinaten automatisch mitgedreht.
+// Optional: display rotation. Degree values are recommended; the old
+// Arduino_GFX indices 1/2/3 remain supported for compatibility.
+//   0   = default
+//   90  = 90 degrees clockwise
+//   180 = 180 degrees
+//   270 = 270 degrees clockwise
+// Waveshare touch coordinates are rotated together with the display.
 #define JARVIS_DISPLAY_ROTATION  0
 
 // Display-Uhrzeit via NTP. POSIX-TZ fuer Deutschland inkl. Sommerzeit.

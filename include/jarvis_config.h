@@ -86,12 +86,28 @@
 #endif
 
 
-// Display rotation for boards with a screen. Values follow Arduino_GFX:
-//   0 = default, 1 = 90 degrees clockwise,
-//   2 = 180 degrees, 3 = 270 degrees clockwise.
+// Display rotation for boards with a screen. Both degree values and legacy
+// Arduino_GFX indices are accepted:
+//   0 = default
+//   90 or 1 = 90 degrees clockwise
+//   180 or 2 = 180 degrees
+//   270 or 3 = 270 degrees clockwise
 // The Waveshare CST816 touch coordinates are rotated with the display.
 #ifndef JARVIS_DISPLAY_ROTATION
 #define JARVIS_DISPLAY_ROTATION 0
+#endif
+
+#if JARVIS_DISPLAY_ROTATION == 90
+#define JARVIS_DISPLAY_ROTATION_INDEX 1
+#elif JARVIS_DISPLAY_ROTATION == 180
+#define JARVIS_DISPLAY_ROTATION_INDEX 2
+#elif JARVIS_DISPLAY_ROTATION == 270
+#define JARVIS_DISPLAY_ROTATION_INDEX 3
+#elif (JARVIS_DISPLAY_ROTATION >= 0) && (JARVIS_DISPLAY_ROTATION <= 3)
+#define JARVIS_DISPLAY_ROTATION_INDEX JARVIS_DISPLAY_ROTATION
+#else
+#define JARVIS_DISPLAY_ROTATION_INDEX 0
+#define JARVIS_DISPLAY_ROTATION_INVALID 1
 #endif
 
 #ifndef JARVIS_NTP_SERVER

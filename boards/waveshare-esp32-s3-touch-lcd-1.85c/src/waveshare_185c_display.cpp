@@ -38,21 +38,27 @@ constexpr int DOT_GAP  = 16;
 // Volume controls live together on the right edge.  The visible circles stay
 // compact, but the touch radius is deliberately much larger for reliable use
 // on the small round panel.
-constexpr int VOL_X        = 334;
+constexpr int VOL_X        = 329;
 constexpr int VOL_UP_Y     = 158;
 constexpr int VOL_DOWN_Y   = 222;
 constexpr int VOL_R        = 18;
 constexpr int VOL_HIT_R    = 34;
-constexpr int VOL_REGION_X = 298;
+constexpr int VOL_REGION_X = 293;
 constexpr int VOL_REGION_Y = 120;
 constexpr int VOL_REGION_W = 62;
 constexpr int VOL_REGION_H = 140;
 
-// Bottom record/mute actions use the entire lower sector as a hit area.
-// The visual control can stay compact while taps up to ~25 px above the old
-// boundary are still accepted.
-constexpr int ACTION_HIT_TOP = 255;
-constexpr int ACTION_SPLIT_X = 180;
+// Primary voice action: the large centre status ring itself is the record
+// button.  The hit radius is slightly larger than the visible outer ring so
+// it remains easy to hit without creating hidden controls elsewhere.
+constexpr int CENTER_HIT_R = 78;
+
+// Dedicated microphone mute/listen control on the left edge.  The visible
+// button stays compact while the touch radius is deliberately generous.
+constexpr int MIC_X     = 31;
+constexpr int MIC_Y     = 190;
+constexpr int MIC_R     = 18;
+constexpr int MIC_HIT_R = 34;
 
 constexpr int NET_X = 278;
 constexpr int NET_Y = 84;
@@ -233,8 +239,9 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
         waveshare185c::LCD_D2, waveshare185c::LCD_D3,
         false);
 
+    const uint8_t rotation = static_cast<uint8_t>(JARVIS_DISPLAY_ROTATION_INDEX);
     gfx_ = new Arduino_ST77916(
-        bus_, -1, 0, true, 360, 360, 0, 0, 0, 0,
+        bus_, -1, rotation, true, 360, 360, 0, 0, 0, 0,
         st77916_150_init_operations, sizeof(st77916_150_init_operations));
 
     if (!gfx_ || !gfx_->begin(80000000)) {
@@ -242,10 +249,17 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
         return false;
     }
 
-    const uint8_t rotation = static_cast<uint8_t>(JARVIS_DISPLAY_ROTATION) & 0x03;
+    // begin() applies the constructor rotation through Arduino_ST77916::setRotation().
+    // Apply it once more explicitly so a future Arduino_GFX init-table change cannot
+    // leave MADCTL at the panel default.
     gfx_->setRotation(rotation);
-    Serial.printf("Display: Rotation=%u (%u Grad).\n",
-                  rotation, static_cast<unsigned>(rotation) * 90U);
+#ifdef JARVIS_DISPLAY_ROTATION_INVALID
+    Serial.printf("WARNUNG: Ungueltige Display-Rotation %d; verwende 0 Grad.\n",
+                  static_cast<int>(JARVIS_DISPLAY_ROTATION));
+#endif
+    Serial.printf("Display: Rotation config=%d -> index=%u (%u Grad).\n",
+                  static_cast<int>(JARVIS_DISPLAY_ROTATION), rotation,
+                  static_cast<unsigned>(rotation) * 90U);
 
     gfx_->setUTF8Print(true);
     gfx_->setTextWrap(false);
@@ -343,8 +357,64 @@ void Waveshare185CDisplay::renderStatusLabels(uint16_t accent) {
 }
 
 // ---------------------------------------------------------------------------
+// Partial state redraw
+// ---------------------------------------------------------------------------
+
+void Waveshare185CDisplay::clearMessageArea() {
+    // Transcript/assistant bubbles live in this small lower-centre area.
+    // Clear only that area instead of rebuilding the whole dashboard.
+    gfx_->fillRect(126, 282, 108, 68, BG);
+    messageBubbleVisible_ = false;
+}
+
+void Waveshare185CDisplay::renderCenterState(bool updateMic) {
+    if (!ready_ || !displayOn_ || networkPopupVisible_) return;
+
+    const uint16_t accent = stateAccent();
+
+    // The ring itself can be redrawn in place. renderDotGrid() completely
+    // repaints its interior and all state-coloured ring pixels.
+    renderDotGrid(accent);
+
+    // State/detail strings have different widths. Clear only their local
+    // label strip first so shorter labels never leave glyph remnants behind.
+    const int baseY = CY + R2 + 9;
+    gfx_->fillRect(52, baseY - 2, 256, 46, BG);
+    renderStatusLabels(accent);
+
+    if (updateMic) {
+        renderMicControl();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Edge controls + network popup
 // ---------------------------------------------------------------------------
+
+void Waveshare185CDisplay::renderMicControl() {
+    const bool muted = state_ == SatelliteState::Muted;
+    const uint16_t accent = muted ? RED : CYAN;
+
+    gfx_->fillCircle(MIC_X, MIC_Y, MIC_R, PANEL_2);
+    gfx_->drawCircle(MIC_X, MIC_Y, MIC_R, BORDER);
+
+    // Small vector microphone icon so no additional icon font is required.
+    // Capsule / microphone body.
+    gfx_->drawRoundRect(MIC_X - 4, MIC_Y - 9, 8, 13, 4, accent);
+    // Support / stem.
+    gfx_->drawLine(MIC_X - 8, MIC_Y - 1, MIC_X - 8, MIC_Y + 1, accent);
+    gfx_->drawLine(MIC_X + 8, MIC_Y - 1, MIC_X + 8, MIC_Y + 1, accent);
+    gfx_->drawLine(MIC_X - 8, MIC_Y + 1, MIC_X - 5, MIC_Y + 6, accent);
+    gfx_->drawLine(MIC_X + 8, MIC_Y + 1, MIC_X + 5, MIC_Y + 6, accent);
+    gfx_->drawLine(MIC_X - 5, MIC_Y + 6, MIC_X + 5, MIC_Y + 6, accent);
+    gfx_->drawLine(MIC_X, MIC_Y + 8, MIC_X, MIC_Y + 12, accent);
+    gfx_->drawLine(MIC_X - 5, MIC_Y + 12, MIC_X + 5, MIC_Y + 12, accent);
+
+    if (muted) {
+        gfx_->drawLine(MIC_X - 11, MIC_Y - 12, MIC_X + 11, MIC_Y + 12, RED);
+        gfx_->drawLine(MIC_X - 10, MIC_Y - 12, MIC_X + 12, MIC_Y + 10, RED);
+    }
+}
 
 void Waveshare185CDisplay::renderNetworkButton() {
     gfx_->fillRoundRect(NET_X, NET_Y, NET_W, NET_H, 8, PANEL_2);
@@ -465,6 +535,7 @@ void Waveshare185CDisplay::toggleDisplay() {
 void Waveshare185CDisplay::renderDashboard() {
     if (!ready_ || !displayOn_) return;
     gfx_->fillScreen(BG);
+    messageBubbleVisible_ = false;
 
     const uint16_t accent = stateAccent();
 
@@ -477,6 +548,7 @@ void Waveshare185CDisplay::renderDashboard() {
     renderClock(true);
     renderDotGrid(accent);
     renderStatusLabels(accent);
+    renderMicControl();
     renderVolumeControls();
     renderNetworkButton();
     if (networkPopupVisible_) renderNetworkPopup();
@@ -484,9 +556,29 @@ void Waveshare185CDisplay::renderDashboard() {
 
 void Waveshare185CDisplay::showState(SatelliteState state, const String& detail) {
     if (!ready_) return;
+
+    const SatelliteState previous = state_;
+    const bool muteChanged =
+        (previous == SatelliteState::Muted) != (state == SatelliteState::Muted);
+
     state_ = state;
     detail_ = detail;
-    if (displayOn_) renderDashboard();
+
+    if (!displayOn_) return;
+
+    // Do not paint underneath an open modal. Closing the network popup already
+    // performs one complete dashboard render using the newest state.
+    if (networkPopupVisible_) return;
+
+    // Leaving transcript/speaking mode should remove the previous bubble, but
+    // only from its own small region.
+    if (messageBubbleVisible_ &&
+        state != SatelliteState::Processing &&
+        state != SatelliteState::Speaking) {
+        clearMessageArea();
+    }
+
+    renderCenterState(muteChanged);
 }
 
 // ---------------------------------------------------------------------------
@@ -502,10 +594,13 @@ static int chordHalfWidth(int y) {
 
 void Waveshare185CDisplay::showTranscript(const String& text) {
     if (!ready_) return;
+    const bool muteChanged = state_ == SatelliteState::Muted;
     state_ = SatelliteState::Processing;
     detail_ = "";
     if (!displayOn_) return;
-    renderDashboard();
+    if (networkPopupVisible_) return;
+
+    renderCenterState(muteChanged);
 
     // Find narrowest chord over the bubble rows (y 286..348)
     int minHalf = 180;
@@ -528,14 +623,18 @@ void Waveshare185CDisplay::showTranscript(const String& text) {
     const int textX = bx + 10;
     wrappedFontText(text, textX, by + 12, bw - 20, 3,
                     TEXT, u8g2_font_helvR08_tf, 12);
+    messageBubbleVisible_ = true;
 }
 
 void Waveshare185CDisplay::showAssistant(const String& text) {
     if (!ready_) return;
+    const bool muteChanged = state_ == SatelliteState::Muted;
     state_ = SatelliteState::Speaking;
     detail_ = "";
     if (!displayOn_) return;
-    renderDashboard();
+    if (networkPopupVisible_) return;
+
+    renderCenterState(muteChanged);
 
     int minHalf = 180;
     for (int y = 286; y <= 348; y += 4)
@@ -557,21 +656,23 @@ void Waveshare185CDisplay::showAssistant(const String& text) {
     const int textX = bx + 10;
     wrappedFontText(text, textX, by + 12, bw - 20, 3,
                     TEXT, u8g2_font_helvR08_tf, 12);
+    messageBubbleVisible_ = true;
 }
 
 // ---------------------------------------------------------------------------
 // Touch
 // ---------------------------------------------------------------------------
 
-bool Waveshare185CDisplay::hitRecordButton(uint16_t x, uint16_t y) const {
-    // Large lower-left hit sector.  This is intentionally larger than the
-    // visible action control so a slightly imprecise tap still records.
-    return y >= ACTION_HIT_TOP && x < ACTION_SPLIT_X;
+bool Waveshare185CDisplay::hitCenterRecordButton(uint16_t x, uint16_t y) const {
+    const int dx = static_cast<int>(x) - CX;
+    const int dy = static_cast<int>(y) - CY;
+    return dx * dx + dy * dy <= CENTER_HIT_R * CENTER_HIT_R;
 }
 
-bool Waveshare185CDisplay::hitMuteButton(uint16_t x, uint16_t y) const {
-    // Large lower-right hit sector for STUMM/ZUHOEREN.
-    return y >= ACTION_HIT_TOP && x >= ACTION_SPLIT_X;
+bool Waveshare185CDisplay::hitMicButton(uint16_t x, uint16_t y) const {
+    const int dx = static_cast<int>(x) - MIC_X;
+    const int dy = static_cast<int>(y) - MIC_Y;
+    return dx * dx + dy * dy <= MIC_HIT_R * MIC_HIT_R;
 }
 
 bool Waveshare185CDisplay::hitNetworkButton(uint16_t x, uint16_t y) const {
