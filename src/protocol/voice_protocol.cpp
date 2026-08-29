@@ -197,7 +197,7 @@ void VoiceProtocol::sendSessionStart() {
     doc["type"] = "session.start";
     doc["language"] = "de";
     doc["auto_chat"] = true;
-    doc["auto_tts"] = false;
+    doc["auto_tts"] = true;
     doc["content_type"] = "audio/wav";
 
     String out;
