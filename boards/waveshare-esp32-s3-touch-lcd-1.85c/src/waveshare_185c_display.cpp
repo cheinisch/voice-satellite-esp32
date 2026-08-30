@@ -57,12 +57,12 @@ constexpr int CENTER_HIT_R = 78;
 // Dedicated microphone mute/listen control on the left edge.  The visible
 // button stays compact while the touch radius is deliberately generous.
 constexpr int MIC_X     = 31;
-constexpr int MIC_Y     = 190;
-constexpr int MIC_R     = 18;
+constexpr int MIC_Y     = 199;
+constexpr int MIC_R     = 20;
 constexpr int MIC_HIT_R = 34;
 
 constexpr int NET_X = 5;
-constexpr int NET_Y = 140;
+constexpr int NET_Y = 149;
 constexpr int NET_W = 52;
 constexpr int NET_H = 24;
 
