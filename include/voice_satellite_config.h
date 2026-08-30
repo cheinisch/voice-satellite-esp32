@@ -78,6 +78,35 @@
 #define VOICE_SATELLITE_AUTO_TTS 1
 #endif
 
+// Wakeword acknowledgement. When enabled, the satellite first asks the Core
+// for a dynamic greeting via /api/v1/greetings/tts. If the endpoint is not
+// reachable or TTS fails, a short local confirmation tone is played instead.
+#ifndef VOICE_SATELLITE_WAKE_GREETING_ENABLED
+#define VOICE_SATELLITE_WAKE_GREETING_ENABLED 1
+#endif
+#ifndef VOICE_SATELLITE_WAKE_GREETING_CONTEXT
+#define VOICE_SATELLITE_WAKE_GREETING_CONTEXT "wakeword"
+#endif
+#ifndef VOICE_SATELLITE_WAKE_GREETING_TIMEOUT_MS
+#define VOICE_SATELLITE_WAKE_GREETING_TIMEOUT_MS 6000
+#endif
+#ifndef VOICE_SATELLITE_WAKE_ACK_TONE_ENABLED
+#define VOICE_SATELLITE_WAKE_ACK_TONE_ENABLED 1
+#endif
+
+// Preload the Core LLM as soon as the wakeword fires. This request runs in a
+// background FreeRTOS task so greeting/playback and recording are not delayed
+// by Ollama model loading.
+#ifndef VOICE_SATELLITE_LLM_WAKEUP_ENABLED
+#define VOICE_SATELLITE_LLM_WAKEUP_ENABLED 1
+#endif
+#ifndef VOICE_SATELLITE_LLM_WAKEUP_KEEP_ALIVE
+#define VOICE_SATELLITE_LLM_WAKEUP_KEEP_ALIVE "10m"
+#endif
+#ifndef VOICE_SATELLITE_LLM_WAKEUP_TIMEOUT_MS
+#define VOICE_SATELLITE_LLM_WAKEUP_TIMEOUT_MS 30000
+#endif
+
 // TTS quality requested from Core for auto-TTS sessions.
 // User-facing values: low, medium, high. "medium" is translated to
 // the Core API quality name "balanced" for compatibility.

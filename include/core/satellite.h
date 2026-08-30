@@ -22,6 +22,8 @@ private:
     bool awaitingResponse_ = false;
     bool wakeWordEnabled_ = false;
     bool wakeWordSuspended_ = false;
+    bool wakeInteractionPending_ = false;
+    volatile bool llmWakeupTaskRunning_ = false;
     bool silenceSpeechSeen_ = false;
     uint32_t silenceVoicedSamples_ = 0;
     uint32_t silenceLastVoiceAt_ = 0;
@@ -55,6 +57,12 @@ private:
     void toggleMute();
     void suspendWakeWord();
     void resumeWakeWordIfIdle();
+    void handleWakeWordTrigger();
+    bool requestWakeGreetingTts();
+    void playWakeAckTone();
+    void startLlmWakeupAsync();
+    static void llmWakeupTaskEntry(void* arg);
+    void runLlmWakeupRequest();
     void startRecording(bool autoTts = true);
     void stopRecording();
     void pumpRecording();

@@ -38,6 +38,16 @@
 #define VOICE_SATELLITE_WAKEWORD_ENABLED       0
 #define VOICE_SATELLITE_WAKEWORD_NAME          "Hi ESP"
 
+// Nach Wakeword: dynamische Begruessung vom Core per TTS. Falls der Core/TTS
+// nicht erreichbar ist, wird lokal ein kurzer Signalton abgespielt.
+#define VOICE_SATELLITE_WAKE_GREETING_ENABLED  1
+#define VOICE_SATELLITE_WAKE_GREETING_CONTEXT  "wakeword"
+#define VOICE_SATELLITE_WAKE_ACK_TONE_ENABLED  1
+
+// LLM direkt bei Wakeword-Erkennung im Hintergrund vorladen.
+#define VOICE_SATELLITE_LLM_WAKEUP_ENABLED      1
+#define VOICE_SATELLITE_LLM_WAKEUP_KEEP_ALIVE  "10m"
+
 // Normale Touch/BOOT-Sprachrunden sprechen die Antwort aus.
 #define VOICE_SATELLITE_AUTO_TTS         1
 

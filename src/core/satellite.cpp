@@ -2,6 +2,8 @@
 #include "build_info.h"
 #include "voice_satellite_config.h"
 #include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <esp_heap_caps.h>
 #include <cstring>
 #include <cmath>
@@ -65,6 +67,243 @@ void Satellite::resumeWakeWordIfIdle() {
     if (protocol_.ready()) {
         setUiState(SatelliteState::Ready, String("Wakeword: ") + board_.audio().wakeWordName());
     }
+}
+
+
+void Satellite::playWakeAckTone() {
+#if VOICE_SATELLITE_WAKE_ACK_TONE_ENABLED
+    board_.audio().clearOutput();
+    setUiState(SatelliteState::Listening, "Wakeword erkannt");
+
+    constexpr float TWO_PI_F = 6.28318530717958647692f;
+    constexpr float FREQ = 880.0f;
+    constexpr int16_t AMPLITUDE = 6500;
+    constexpr size_t BLOCK = 128;
+    constexpr uint32_t DURATION_MS = 110;
+    constexpr size_t TOTAL = (VOICE_SATELLITE_AUDIO_RATE * DURATION_MS) / 1000;
+    int16_t tone[BLOCK];
+    size_t generated = 0;
+
+    while (generated < TOTAL) {
+        const size_t count = (TOTAL - generated) < BLOCK ? (TOTAL - generated) : BLOCK;
+        for (size_t n = 0; n < count; ++n) {
+            const float phase = TWO_PI_F * FREQ * static_cast<float>(generated + n) /
+                                static_cast<float>(VOICE_SATELLITE_AUDIO_RATE);
+            tone[n] = static_cast<int16_t>(sinf(phase) * AMPLITUDE);
+        }
+        const size_t written = board_.audio().writePcm16(tone, count, 250);
+        if (written != count) break;
+        generated += count;
+        if (protocolStarted_) protocol_.loop();
+        wifi_.loop();
+    }
+    board_.audio().clearOutput();
+    Serial.println("Wakeword: lokaler Bestätigungston abgespielt.");
+#endif
+}
+
+void Satellite::startLlmWakeupAsync() {
+#if VOICE_SATELLITE_LLM_WAKEUP_ENABLED
+    if (llmWakeupTaskRunning_ || WiFi.status() != WL_CONNECTED) return;
+    llmWakeupTaskRunning_ = true;
+    const BaseType_t created = xTaskCreate(
+        &Satellite::llmWakeupTaskEntry,
+        "llm-wakeup",
+        6144,
+        this,
+        1,
+        nullptr
+    );
+    if (created != pdPASS) {
+        llmWakeupTaskRunning_ = false;
+        Serial.println("LLM-Wakeup: Hintergrundtask konnte nicht gestartet werden.");
+    }
+#endif
+}
+
+void Satellite::llmWakeupTaskEntry(void* arg) {
+    Satellite* self = static_cast<Satellite*>(arg);
+    if (self) {
+        self->runLlmWakeupRequest();
+        self->llmWakeupTaskRunning_ = false;
+    }
+    vTaskDelete(nullptr);
+}
+
+void Satellite::runLlmWakeupRequest() {
+#if VOICE_SATELLITE_LLM_WAKEUP_ENABLED
+    const String scheme = VOICE_SATELLITE_CORE_TLS ? "https://" : "http://";
+    const String url = scheme + String(VOICE_SATELLITE_CORE_HOST) + ":" +
+                       String(VOICE_SATELLITE_CORE_PORT) + "/api/v1/assistant/wakeup";
+    const String body = String("{\"keep_alive\":\"") +
+                        VOICE_SATELLITE_LLM_WAKEUP_KEEP_ALIVE + "\"}";
+
+    HTTPClient http;
+    http.setConnectTimeout(3000);
+    http.setTimeout(VOICE_SATELLITE_LLM_WAKEUP_TIMEOUT_MS);
+
+    int status = -1;
+#if VOICE_SATELLITE_CORE_TLS
+    WiFiClientSecure client;
+    client.setInsecure();
+#else
+    WiFiClient client;
+#endif
+    if (!http.begin(client, url)) {
+        Serial.println("LLM-Wakeup: HTTP-Verbindung konnte nicht initialisiert werden.");
+        return;
+    }
+    http.addHeader("Content-Type", "application/json");
+    if (strlen(VOICE_SATELLITE_CORE_TOKEN) > 0) {
+        http.addHeader("Authorization", String("Bearer ") + VOICE_SATELLITE_CORE_TOKEN);
+    }
+    status = http.POST(body);
+    if (status >= 200 && status < 300) {
+        Serial.printf("LLM-Wakeup: Core meldet bereit (HTTP %d).\n", status);
+    } else {
+        Serial.printf("LLM-Wakeup: fehlgeschlagen (HTTP %d).\n", status);
+    }
+    http.end();
+#endif
+}
+
+bool Satellite::requestWakeGreetingTts() {
+#if !VOICE_SATELLITE_WAKE_GREETING_ENABLED
+    return false;
+#else
+    if (WiFi.status() != WL_CONNECTED) return false;
+
+    const String scheme = VOICE_SATELLITE_CORE_TLS ? "https://" : "http://";
+    const String url = scheme + String(VOICE_SATELLITE_CORE_HOST) + ":" +
+                       String(VOICE_SATELLITE_CORE_PORT) + "/api/v1/greetings/tts";
+    String greetingQuality = VOICE_SATELLITE_TTS_QUALITY;
+    greetingQuality.toLowerCase();
+    if (greetingQuality == "medium") greetingQuality = "balanced";
+    if (greetingQuality != "low" && greetingQuality != "balanced" && greetingQuality != "high") {
+        greetingQuality = "low";
+    }
+    const String body = String("{\"name_mode\":\"rotate\",\"context\":\"") +
+                        VOICE_SATELLITE_WAKE_GREETING_CONTEXT +
+                        "\",\"quality\":\"" + greetingQuality + "\"}";
+
+    HTTPClient http;
+    http.setConnectTimeout(2500);
+    http.setTimeout(VOICE_SATELLITE_WAKE_GREETING_TIMEOUT_MS);
+#if VOICE_SATELLITE_CORE_TLS
+    WiFiClientSecure client;
+    client.setInsecure();
+#else
+    WiFiClient client;
+#endif
+    if (!http.begin(client, url)) {
+        Serial.println("Wake-Greeting: HTTP-Verbindung konnte nicht initialisiert werden.");
+        return false;
+    }
+    http.addHeader("Content-Type", "application/json");
+    if (strlen(VOICE_SATELLITE_CORE_TOKEN) > 0) {
+        http.addHeader("Authorization", String("Bearer ") + VOICE_SATELLITE_CORE_TOKEN);
+    }
+
+    setUiState(SatelliteState::Speaking, "Begrüßung");
+    const int status = http.POST(body);
+    if (status < 200 || status >= 300) {
+        Serial.printf("Wake-Greeting: Core/TTS nicht verfügbar (HTTP %d), verwende Signalton.\n", status);
+        http.end();
+        return false;
+    }
+
+    const int announcedSize = http.getSize();
+    if (announcedSize > 0 && static_cast<size_t>(announcedSize) > (2U * 1024U * 1024U)) {
+        Serial.printf("Wake-Greeting: Antwort zu groß (%d Bytes), verwende Signalton.\n", announcedSize);
+        http.end();
+        return false;
+    }
+
+    resetTtsPlayback(VOICE_SATELLITE_AUDIO_RATE, 1);
+    if (!allocateTtsBuffer()) {
+        http.end();
+        return false;
+    }
+
+    auto* stream = http.getStreamPtr();
+    uint8_t chunk[2048];
+    uint32_t lastDataAt = millis();
+    while (http.connected() && (announcedSize < 0 || ttsBufferBytes_ < static_cast<size_t>(announcedSize))) {
+        const size_t available = stream ? stream->available() : 0;
+        if (available) {
+            const size_t wanted = available < sizeof(chunk) ? available : sizeof(chunk);
+            const int got = stream->readBytes(chunk, wanted);
+            if (got > 0) {
+                if (!appendTtsData(chunk, static_cast<size_t>(got))) {
+                    freeTtsBuffer();
+                    http.end();
+                    return false;
+                }
+                lastDataAt = millis();
+            }
+        } else {
+            if (millis() - lastDataAt > VOICE_SATELLITE_WAKE_GREETING_TIMEOUT_MS) break;
+            if (protocolStarted_) protocol_.loop();
+            wifi_.loop();
+            delay(1);
+        }
+    }
+    http.end();
+
+    if (ttsBufferBytes_ == 0 || (announcedSize > 0 && ttsBufferBytes_ != static_cast<size_t>(announcedSize))) {
+        Serial.printf("Wake-Greeting: unvollständig (%u/%d Bytes), verwende Signalton.\n",
+                      static_cast<unsigned>(ttsBufferBytes_), announcedSize);
+        freeTtsBuffer();
+        return false;
+    }
+
+    ttsReceiving_ = false;
+    ttsPlaybackPending_ = true;
+    ttsPlaybackActive_ = false;
+    Serial.printf("Wake-Greeting: %u Bytes empfangen, Wiedergabe startet.\n",
+                  static_cast<unsigned>(ttsBufferBytes_));
+    return true;
+#endif
+}
+
+void Satellite::handleWakeWordTrigger() {
+    wakeWordSuspended_ = true; // WakeNet callback has already paused its feed task.
+    if (muted_) {
+        Serial.println("Wakeword erkannt, aber Mikrofon ist stumm.");
+        return;
+    }
+    if (recording_ || awaitingResponse_ || ttsReceiving_ || ttsPlaybackPending_ || ttsPlaybackActive_) {
+        Serial.println("Wakeword ignoriert: Sprachrunde läuft bereits.");
+        return;
+    }
+
+    Serial.printf("Wakeword erkannt: %s\n", board_.audio().wakeWordName());
+    delay(20); // allow the ESP_SR feed task to release the shared I2S reader
+
+    // Model warmup starts immediately and deliberately does not block the
+    // acknowledgement/greeting path. It is attempted whenever Wi-Fi is up,
+    // even if the Voice WebSocket has not reached READY yet.
+    startLlmWakeupAsync();
+
+    if (!protocol_.ready()) {
+        Serial.println("Wakeword erkannt, aber Voice-Core ist noch nicht bereit.");
+        playWakeAckTone();
+        awaitingResponse_ = false;
+        resumeWakeWordIfIdle();
+        return;
+    }
+
+    wakeInteractionPending_ = true;
+
+    if (requestWakeGreetingTts()) {
+        // Recording begins automatically after greeting playback in
+        // finishTtsPlayback().
+        return;
+    }
+
+    playWakeAckTone();
+    wakeInteractionPending_ = false;
+    startRecording(VOICE_SATELLITE_AUTO_TTS != 0);
 }
 
 void Satellite::toggleMute() {
@@ -658,6 +897,14 @@ void Satellite::finishTtsPlayback() {
     ttsExpectedBytes_ = 0;
     ttsChunkSequence_ = 0;
     awaitingResponse_ = false;
+
+    if (wakeInteractionPending_) {
+        wakeInteractionPending_ = false;
+        Serial.println("Wake-Greeting beendet; Aufnahme startet.");
+        startRecording(VOICE_SATELLITE_AUTO_TTS != 0);
+        return;
+    }
+
     setUiState(protocol_.ready() ? SatelliteState::Ready : SatelliteState::ConnectingCore,
                     protocol_.ready() ? "Bereit" : "Reconnect");
     resumeWakeWordIfIdle();
@@ -913,22 +1160,7 @@ void Satellite::loop() {
     if (board_.consumeMuteToggle()) toggleMute();
 
     if (wakeWordEnabled_ && board_.audio().consumeWakeWordTrigger()) {
-        wakeWordSuspended_ = true; // callback pauses ESP_SR before handing over I2S
-        if (muted_) {
-            Serial.println("Wakeword erkannt, aber Mikrofon ist stumm.");
-        } else if (!protocol_.ready()) {
-            Serial.println("Wakeword erkannt, aber Core ist nicht bereit.");
-            awaitingResponse_ = false;
-            resumeWakeWordIfIdle();
-        } else if (recording_ || awaitingResponse_ || ttsReceiving_ || ttsPlaybackActive_) {
-            Serial.println("Wakeword ignoriert: Sprachrunde läuft bereits.");
-        } else {
-            Serial.printf("Wakeword erkannt: %s\n", board_.audio().wakeWordName());
-            // The ESP_SR callback has already requested PAUSE_FEED. Allow the
-            // background feed task to stop reading the shared I2S stream.
-            delay(20);
-            startRecording(VOICE_SATELLITE_AUTO_TTS != 0);
-        }
+        handleWakeWordTrigger();
     }
 
     if (board_.consumeVoiceTrigger()) {
