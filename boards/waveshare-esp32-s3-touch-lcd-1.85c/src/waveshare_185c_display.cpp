@@ -323,8 +323,9 @@ void Waveshare185CDisplay::renderClock(bool force) {
     // visibly larger and smoother than the old 3x bitmap font while leaving
     // enough air above the central status ring.
     gfx_->fillRect(0, 8, 360, 72, BG);
-    centeredFont(String(buf), 20, TEXT, u8g2_font_logisoso38_tr);
-    centeredFont(compact(displayName_, 28), 65, MUTED_TXT, u8g2_font_helvR10_tf);
+    // With the device name removed from the dashboard header, the clock can
+    // use the next larger Logisoso face without crowding the center ring.
+    centeredFont(String(buf), 16, TEXT, u8g2_font_logisoso42_tr);
 }
 
 // ---------------------------------------------------------------------------
@@ -512,6 +513,7 @@ void Waveshare185CDisplay::renderNetworkPopup() {
         y += 20;
     };
 
+    row("GERAET", compact(displayName_, 22), TEXT);
     row("WLAN", ssid, TEXT);
     row("IP", ip, TEXT);
     row("GW", gateway, TEXT);
