@@ -23,6 +23,7 @@ constexpr uint16_t TEXT      = rgb565(220, 238, 248);
 constexpr uint16_t MUTED_TXT = rgb565(100, 130, 150);
 constexpr uint16_t CYAN      = rgb565( 32, 210, 210);
 constexpr uint16_t GOLD      = rgb565(218, 165,  48);
+constexpr uint16_t ORANGE    = rgb565(255, 140,   0);
 constexpr uint16_t BLUE      = rgb565( 48, 110, 230);
 constexpr uint16_t RED       = rgb565(220,  55,  55);
 
@@ -60,8 +61,8 @@ constexpr int MIC_Y     = 190;
 constexpr int MIC_R     = 18;
 constexpr int MIC_HIT_R = 34;
 
-constexpr int NET_X = 278;
-constexpr int NET_Y = 84;
+constexpr int NET_X = 5;
+constexpr int NET_Y = 140;
 constexpr int NET_W = 52;
 constexpr int NET_H = 24;
 
@@ -69,6 +70,20 @@ constexpr int POP_X = 43;
 constexpr int POP_Y = 88;
 constexpr int POP_W = 274;
 constexpr int POP_H = 188;
+
+String normalizeDisplayDashes(const String& source) {
+    String text = source;
+    // U8g2 Helvetica includes the regular ASCII hyphen. Core/configuration
+    // values can however contain typographic Unicode dash/minus characters
+    // which are not present in the small font and therefore appear missing.
+    text.replace("\xE2\x80\x90", "-"); // U+2010 HYPHEN
+    text.replace("\xE2\x80\x91", "-"); // U+2011 NON-BREAKING HYPHEN
+    text.replace("\xE2\x80\x92", "-"); // U+2012 FIGURE DASH
+    text.replace("\xE2\x80\x93", "-"); // U+2013 EN DASH
+    text.replace("\xE2\x80\x94", "-"); // U+2014 EM DASH
+    text.replace("\xE2\x88\x92", "-"); // U+2212 MINUS SIGN
+    return text;
+}
 
 } // namespace
 
@@ -81,41 +96,44 @@ constexpr int POP_H = 188;
 
 int Waveshare185CDisplay::textWidth(const String& text, const uint8_t* font) {
     if (!ready_ || !font) return 0;
+    const String shown = normalizeDisplayDashes(text);
     gfx_->setFont(font);
     gfx_->setTextSize(1);
     int16_t x1 = 0, y1 = 0;
     uint16_t w = 0, h = 0;
-    gfx_->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    gfx_->getTextBounds(shown, 0, 0, &x1, &y1, &w, &h);
     return static_cast<int>(w);
 }
 
 void Waveshare185CDisplay::fontText(const String& text, int x, int topY,
                                     uint16_t color, const uint8_t* font) {
     if (!ready_ || !font) return;
+    const String shown = normalizeDisplayDashes(text);
     gfx_->setFont(font);
     gfx_->setTextSize(1);
     gfx_->setTextColor(color);
 
     int16_t x1 = 0, y1 = 0;
     uint16_t w = 0, h = 0;
-    gfx_->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    gfx_->getTextBounds(shown, 0, 0, &x1, &y1, &w, &h);
     gfx_->setCursor(x - x1, topY - y1);
-    gfx_->print(text);
+    gfx_->print(shown);
 }
 
 void Waveshare185CDisplay::centeredFont(const String& text, int topY,
                                         uint16_t color, const uint8_t* font) {
     if (!ready_ || !font) return;
+    const String shown = normalizeDisplayDashes(text);
     gfx_->setFont(font);
     gfx_->setTextSize(1);
     gfx_->setTextColor(color);
 
     int16_t x1 = 0, y1 = 0;
     uint16_t w = 0, h = 0;
-    gfx_->getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+    gfx_->getTextBounds(shown, 0, 0, &x1, &y1, &w, &h);
     const int x = (360 - static_cast<int>(w)) / 2 - x1;
     gfx_->setCursor(max(2, x), topY - y1);
-    gfx_->print(text);
+    gfx_->print(shown);
 }
 
 void Waveshare185CDisplay::wrappedFontText(const String& source, int x, int topY,
@@ -306,7 +324,7 @@ void Waveshare185CDisplay::renderClock(bool force) {
     // enough air above the central status ring.
     gfx_->fillRect(0, 8, 360, 72, BG);
     centeredFont(String(buf), 20, TEXT, u8g2_font_logisoso38_tr);
-    centeredFont(compact(displayName_, 28), 65, MUTED_TXT, u8g2_font_helvR08_tf);
+    centeredFont(compact(displayName_, 28), 65, MUTED_TXT, u8g2_font_helvR10_tf);
 }
 
 // ---------------------------------------------------------------------------
@@ -348,11 +366,11 @@ void Waveshare185CDisplay::renderDotGrid(uint16_t accent) {
 
 void Waveshare185CDisplay::renderStatusLabels(uint16_t accent) {
     const int baseY = CY + R2 + 9;
-    centeredFont(compact(displayName_, 28), baseY, MUTED_TXT, u8g2_font_helvR08_tf);
+    centeredFont(compact(displayName_, 28), baseY, MUTED_TXT, u8g2_font_helvR10_tf);
     centeredFont(stateLabel(), baseY + 14, accent, u8g2_font_helvB10_tf);
     if (detail_.length()) {
-        gfx_->fillRect(48, baseY + 30, 264, 14, BG);
-        centeredFont(compact(detail_, 36), baseY + 30, MUTED_TXT, u8g2_font_helvR08_tf);
+        gfx_->fillRect(48, baseY + 30, 264, 16, BG);
+        centeredFont(compact(detail_, 36), baseY + 30, MUTED_TXT, u8g2_font_helvR10_tf);
     }
 }
 
@@ -379,7 +397,7 @@ void Waveshare185CDisplay::renderCenterState(bool updateMic) {
     // State/detail strings have different widths. Clear only their local
     // label strip first so shorter labels never leave glyph remnants behind.
     const int baseY = CY + R2 + 9;
-    gfx_->fillRect(52, baseY - 2, 256, 46, BG);
+    gfx_->fillRect(52, baseY - 2, 256, 48, BG);
     renderStatusLabels(accent);
 
     if (updateMic) {
@@ -417,9 +435,12 @@ void Waveshare185CDisplay::renderMicControl() {
 }
 
 void Waveshare185CDisplay::renderNetworkButton() {
+    const bool connected = WiFi.status() == WL_CONNECTED;
+    const uint16_t netColor = connected ? CYAN : ORANGE;
+
     gfx_->fillRoundRect(NET_X, NET_Y, NET_W, NET_H, 8, PANEL_2);
-    gfx_->drawRoundRect(NET_X, NET_Y, NET_W, NET_H, 8, BORDER);
-    fontText("NET", NET_X + 13, NET_Y + 6, CYAN, u8g2_font_helvB08_tf);
+    gfx_->drawRoundRect(NET_X, NET_Y, NET_W, NET_H, 8, connected ? BORDER : ORANGE);
+    fontText("NET", NET_X + 11, NET_Y + 5, netColor, u8g2_font_helvB10_tf);
 }
 
 void Waveshare185CDisplay::renderVolumeControls(bool partial) {
@@ -441,9 +462,9 @@ void Waveshare185CDisplay::renderVolumeControls(bool partial) {
 
     // Small centre label between + and -.
     const String vol = String(volumePercent_) + "%";
-    const int labelW = textWidth(vol, u8g2_font_helvR08_tf);
+    const int labelW = textWidth(vol, u8g2_font_helvR10_tf);
     fontText(vol, max(VOL_REGION_X + 2, VOL_X - labelW / 2), 188,
-             MUTED_TXT, u8g2_font_helvR08_tf);
+             MUTED_TXT, u8g2_font_helvR10_tf);
 }
 
 void Waveshare185CDisplay::renderNetworkPopup() {
@@ -475,19 +496,19 @@ void Waveshare185CDisplay::renderNetworkPopup() {
     int y = POP_Y + 46;
 
     auto row = [&](const char* label, const String& value, uint16_t valueColor) {
-        fontText(label, labelX, y, MUTED_TXT, u8g2_font_helvR08_tf);
+        fontText(label, labelX, y, MUTED_TXT, u8g2_font_helvR10_tf);
         String shown = value;
         const int maxValueWidth = POP_X + POP_W - 18 - valueX;
-        while (shown.length() > 3 && textWidth(shown, u8g2_font_helvR08_tf) > maxValueWidth) {
+        while (shown.length() > 3 && textWidth(shown, u8g2_font_helvR10_tf) > maxValueWidth) {
             shown.remove(shown.length() - 1);
         }
         if (shown != value && shown.length() > 3) {
-            while (shown.length() > 3 && textWidth(shown + "...", u8g2_font_helvR08_tf) > maxValueWidth) {
+            while (shown.length() > 3 && textWidth(shown + "...", u8g2_font_helvR10_tf) > maxValueWidth) {
                 shown.remove(shown.length() - 1);
             }
             shown += "...";
         }
-        fontText(shown, valueX, y, valueColor, u8g2_font_helvR08_tf);
+        fontText(shown, valueX, y, valueColor, u8g2_font_helvR10_tf);
         y += 20;
     };
 
@@ -634,12 +655,12 @@ void Waveshare185CDisplay::showTranscript(const String& text) {
     gfx_->drawRoundRect(bx, by, bw, bh, 10, CYAN);
 
     // Badge label "DU"
-    gfx_->fillRect(bx + 10, by - 6, 26, 13, PANEL_2);
-    fontText("DU", bx + 13, by - 4, CYAN, u8g2_font_helvB08_tf);
+    gfx_->fillRect(bx + 10, by - 7, 30, 16, PANEL_2);
+    fontText("DU", bx + 13, by - 5, CYAN, u8g2_font_helvB10_tf);
 
     const int textX = bx + 10;
-    wrappedFontText(text, textX, by + 12, bw - 20, 3,
-                    TEXT, u8g2_font_helvR08_tf, 12);
+    wrappedFontText(text, textX, by + 13, bw - 20, 3,
+                    TEXT, u8g2_font_helvR10_tf, 14);
     messageBubbleVisible_ = true;
 }
 
@@ -668,13 +689,13 @@ void Waveshare185CDisplay::showAssistant(const String& text) {
 
     // Assistant badge uses the display name supplied by the Core.
     const String assistantBadge = compact(displayName_, 18);
-    const int assistantBadgeWidth = min(bw - 20, max(40, textWidth(assistantBadge, u8g2_font_helvB08_tf) + 8));
-    gfx_->fillRect(bx + 10, by - 6, assistantBadgeWidth, 13, PANEL_2);
-    fontText(assistantBadge, bx + 13, by - 4, GOLD, u8g2_font_helvB08_tf);
+    const int assistantBadgeWidth = min(bw - 20, max(40, textWidth(assistantBadge, u8g2_font_helvB10_tf) + 8));
+    gfx_->fillRect(bx + 10, by - 7, assistantBadgeWidth, 16, PANEL_2);
+    fontText(assistantBadge, bx + 13, by - 5, GOLD, u8g2_font_helvB10_tf);
 
     const int textX = bx + 10;
-    wrappedFontText(text, textX, by + 12, bw - 20, 3,
-                    TEXT, u8g2_font_helvR08_tf, 12);
+    wrappedFontText(text, textX, by + 13, bw - 20, 3,
+                    TEXT, u8g2_font_helvR10_tf, 14);
     messageBubbleVisible_ = true;
 }
 
