@@ -1,6 +1,6 @@
 # Architektur
 
-`ai-voice-satellite-satellite-esp32` ist ein separates Embedded-Repository.
+`voice-satellite-esp32` ist ein separates Embedded-Repository.
 
 ```text
 src/core + src/network + src/protocol

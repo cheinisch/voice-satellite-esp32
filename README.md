@@ -1,6 +1,6 @@
-# ai-voice-satellite-satellite-esp32
+# voice-satellite-esp32
 
-Standalone firmware for **ESP32-based Ai-Voice-Satellite Voice Satellites**.
+Standalone firmware for **ESP32-based Voice Satellites**.
 
 > This repository is intentionally **separate from the Linux satellite repository**. Linux satellites are developed independently. This repository contains only firmware, hardware profiles, and build files for ESP32/ESP32-S3 devices.
 
@@ -9,9 +9,9 @@ Standalone firmware for **ESP32-based Ai-Voice-Satellite Voice Satellites**.
 ```text
 Microphone / Touch / Buttons
           ↓
-ai-voice-satellite-satellite-esp32
+voice-satellite-esp32
           ↓  PCM16 16 kHz Mono / WebSocket
-Ai-Voice-Satellite Voice Core :8081
+Voice Core :8081
           ↓
 STT → Assistant → TTS
           ↓  PCM16
@@ -47,7 +47,7 @@ Test profile for an ESP32-S3 with an external digital I2S microphone and I2S amp
 
 FutureProofHomes **Satellite1.1** with ESP32-S3 N16R8 and XMOS XU316.
 
-The profile uses the official 48 kHz I2S path and converts audio locally to the Ai-Voice-Satellite PCM16 / 16 kHz / mono format. XMOS version detection and the direct action button are integrated.
+The profile uses the official 48 kHz I2S path and converts audio locally to the Voice Satellite PCM16 / 16 kHz / mono format. XMOS version detection and the direct action button are integrated.
 
 TAS2780 / line-out, LED ring, and XMOS button handling still require additional verification on real hardware.
 
@@ -56,7 +56,7 @@ See [`docs/satellite1-1.md`](docs/satellite1-1.md).
 ## Repository Layout
 
 ```text
-ai-voice-satellite-satellite-esp32/
+voice-satellite-esp32/
 ├── include/                     shared interfaces / configuration
 ├── src/                         hardware-independent satellite core
 │   ├── core/
@@ -89,23 +89,23 @@ Create a local configuration file:
 cp include/local_config.example.h include/local_config.h
 ```
 
-Then configure Wi-Fi, Ai-Voice-Satellite Core, and the satellite identity:
+Then configure Wi-Fi, Core, and the satellite identity:
 
 ```cpp
-#define AIVOICE-SATELLITE_WIFI_SSID       "MyWiFi"
-#define AIVOICE-SATELLITE_WIFI_PASSWORD   "..."
+#define VOICE_SATELLITE_WIFI_SSID       "MyWiFi"
+#define VOICE_SATELLITE_WIFI_PASSWORD   "..."
 
-#define AIVOICE-SATELLITE_CORE_HOST       "172.16.2.30"
-#define AIVOICE-SATELLITE_CORE_PORT       8081
-#define AIVOICE-SATELLITE_CORE_PATH       "/api/v1/voice/live"
-#define AIVOICE-SATELLITE_CORE_TLS        0
-#define AIVOICE-SATELLITE_CORE_TOKEN      "jv_YOUR_TOKEN"
+#define VOICE_SATELLITE_CORE_HOST       "172.16.2.30"
+#define VOICE_SATELLITE_CORE_PORT       8081
+#define VOICE_SATELLITE_CORE_PATH       "/api/v1/voice/live"
+#define VOICE_SATELLITE_CORE_TLS        0
+#define VOICE_SATELLITE_CORE_TOKEN      "jv_YOUR_TOKEN"
 
-#define AIVOICE-SATELLITE_SATELLITE_ID    "satellite-livingroom"
-#define AIVOICE-SATELLITE_SATELLITE_NAME  "Living Room"
+#define VOICE_SATELLITE_ID    "satellite-livingroom"
+#define VOICE_SATELLITE_NAME  "Living Room"
 ```
 
-`include/local_config.h` is not committed to Git. Wi-Fi credentials and `AIVOICE-SATELLITE_CORE_TOKEN` therefore remain local.
+`include/local_config.h` is not committed to Git. Wi-Fi credentials and `VOICE_SATELLITE_CORE_TOKEN` therefore remain local.
 
 The token is transmitted during the WebSocket upgrade as:
 
@@ -120,13 +120,13 @@ It is not printed to the serial console.
 The maximum recording duration can be configured per satellite:
 
 ```cpp
-#define AIVOICE-SATELLITE_RECORD_MS 8000
+#define VOICE_SATELLITE_RECORD_MS 8000
 ```
 
 For example:
 
 ```cpp
-#define AIVOICE-SATELLITE_RECORD_MS 12000
+#define VOICE_SATELLITE_RECORD_MS 12000
 ```
 
 This value is the maximum recording duration. If silence detection is enabled, a recording may end earlier.
@@ -136,11 +136,11 @@ This value is the maximum recording duration. If silence detection is enabled, a
 The satellite can automatically stop recording after speech has ended:
 
 ```cpp
-#define AIVOICE-SATELLITE_SILENCE_DETECTION       1
-#define AIVOICE-SATELLITE_SILENCE_THRESHOLD       500
-#define AIVOICE-SATELLITE_SILENCE_TIMEOUT_MS      900
-#define AIVOICE-SATELLITE_SILENCE_MIN_SPEECH_MS   250
-#define AIVOICE-SATELLITE_SILENCE_ARM_MS          300
+#define VOICE_SATELLITE_SILENCE_DETECTION       1
+#define VOICE_SATELLITE_SILENCE_THRESHOLD       500
+#define VOICE_SATELLITE_SILENCE_TIMEOUT_MS      900
+#define VOICE_SATELLITE_SILENCE_MIN_SPEECH_MS   250
+#define VOICE_SATELLITE_SILENCE_ARM_MS          300
 ```
 
 Typical flow:
@@ -156,10 +156,10 @@ Speech detected
       ↓
 Recording ends automatically
       ↓
-Audio is sent to Ai-Voice-Satellite
+Audio is sent to Voice Satellite
 ```
 
-`AIVOICE-SATELLITE_RECORD_MS` always remains the hard maximum.
+`VOICE_SATELLITE_RECORD_MS` always remains the hard maximum.
 
 ## Optional Wake Word
 
@@ -168,13 +168,13 @@ The Waveshare ESP32-S3 can optionally use local ESP-SR / WakeNet wake-word detec
 Example:
 
 ```cpp
-#define AIVOICE-SATELLITE_WAKEWORD_ENABLED 1
-#define AIVOICE-SATELLITE_WAKEWORD_NAME    "Hi ESP"
+#define VOICE_SATELLITE_WAKEWORD_ENABLED 1
+#define VOICE_SATELLITE_WAKEWORD_NAME    "Hi ESP"
 ```
 
 The current test implementation uses Espressif's local **`wn9_hiesp`** WakeNet model.
 
-The wake word is detected locally on the ESP32-S3. Microphone audio is not continuously sent to the Ai-Voice-Satellite Core while waiting for the wake word.
+The wake word is detected locally on the ESP32-S3. Microphone audio is not continuously sent to the Core while waiting for the wake word.
 
 Flow:
 
@@ -191,7 +191,7 @@ Question
   ↓
 Silence detection / recording timeout
   ↓
-Ai-Voice-Satellite Core
+Core
   ↓
 STT → Assistant → TTS
 ```
@@ -201,7 +201,7 @@ WakeNet is paused while STT/TTS is active and resumes after the microphone input
 Changing only:
 
 ```cpp
-#define AIVOICE-SATELLITE_WAKEWORD_NAME "Computer"
+#define VOICE_SATELLITE_WAKEWORD_NAME "Computer"
 ```
 
 does **not** train a new wake word. The configured model still determines which word is recognized.
@@ -213,7 +213,7 @@ The ESP32 uses the `low` TTS quality profile by default.
 It can be changed per satellite:
 
 ```cpp
-#define AIVOICE-SATELLITE_TTS_QUALITY "low"
+#define VOICE_SATELLITE_TTS_QUALITY "low"
 ```
 
 Supported local values:
@@ -226,14 +226,14 @@ high
 
 `medium` is translated to the Core's `balanced` quality profile.
 
-The actual TTS provider and voice are selected by the Ai-Voice-Satellite Voice service configuration. The ESP32 does not need to know whether the server uses Piper, Kokoro, or another provider.
+The actual TTS provider and voice are selected by the Voice Satellite Voice service configuration. The ESP32 does not need to know whether the server uses Piper, Kokoro, or another provider.
 
 ## Display Rotation
 
 The Waveshare display can be rotated through `local_config.h`:
 
 ```cpp
-#define AIVOICE-SATELLITE_DISPLAY_ROTATION 0
+#define VOICE_SATELLITE_DISPLAY_ROTATION 0
 ```
 
 Supported values:
@@ -250,9 +250,9 @@ Touch coordinates are rotated together with the display.
 Existing touch calibration options remain available:
 
 ```cpp
-#define AIVOICE-SATELLITE_WAVESHARE_TOUCH_SWAP_XY   0
-#define AIVOICE-SATELLITE_WAVESHARE_TOUCH_INVERT_X  0
-#define AIVOICE-SATELLITE_WAVESHARE_TOUCH_INVERT_Y  0
+#define VOICE_SATELLITE_WAVESHARE_TOUCH_SWAP_XY   0
+#define VOICE_SATELLITE_WAVESHARE_TOUCH_INVERT_X  0
+#define VOICE_SATELLITE_WAVESHARE_TOUCH_INVERT_Y  0
 ```
 
 ## Building
@@ -326,18 +326,18 @@ The display and touch rotation can be configured per device.
 ## Typical Serial Output
 
 ```text
-Ai-Voice-Satellite ESP32 Satellite 0.1.0 Build 3
-Client: ai-voice-satellite-satellite-esp32
+Voice Satellite 0.1.0 Build 3
+Client: voice-satellite-esp32
 Board: Waveshare ESP32-S3-Touch-LCD-1.85C V2
 
 Wi-Fi connected ...
-Core ready: ai-voice-satellite.voice.v1
+Core ready: voice.satellite.v1
 
 Recording started (max. 8000 ms, auto_tts=yes, silence=yes)...
-Sending data to Ai-Voice-Satellite
+Sending data to Voice Satellite
 
 You: How will the weather be tomorrow?
-Ai-Voice-Satellite: Tomorrow will be ...
+Voice Satellite: Tomorrow will be ...
 
 TTS playback ...
 TTS finished.
@@ -364,7 +364,7 @@ The satellite connects to:
 using protocol:
 
 ```text
-ai-voice-satellite.voice.v1
+voice.satellite.v1
 ```
 
 The client can advertise capabilities such as:
@@ -403,7 +403,7 @@ binary WAV message
 audio.commit
 ```
 
-The Waveshare microphone path records at 16 kHz / 16-bit and converts the ES7210 stereo input to Ai-Voice-Satellite mono audio.
+The Waveshare microphone path records at 16 kHz / 16-bit and converts the ES7210 stereo input to Voice Satellite mono audio.
 
 ### TTS Downlink
 
@@ -453,8 +453,8 @@ Available commands:
 ```text
 mic      local microphone / I2S test
 spk      local 1 kHz speaker test
-stt      STT-only test via Ai-Voice-Satellite, auto_tts=false
-tts      full STT → Ai-Voice-Satellite → TTS → speaker roundtrip
+stt      STT-only test via Voice Satellite, auto_tts=false
+tts      full STT → Voice Satellite → TTS → speaker roundtrip
 stop     stop the current recording
 mute     toggle microphone mute / listen state
 status   show Wi-Fi, Core, recording, mute, and memory status
@@ -477,7 +477,7 @@ stt
 
 and press ENTER.
 
-The satellite records up to `AIVOICE-SATELLITE_RECORD_MS`. If silence detection is enabled, it may stop earlier.
+The satellite records up to `VOICE_SATELLITE_RECORD_MS`. If silence detection is enabled, it may stop earlier.
 
 `stop` can always be used to finish the recording manually.
 
@@ -488,7 +488,7 @@ Example:
 Speak into the microphone now.
 
 Recording started (max. 8000 ms)...
-Sending data to Ai-Voice-Satellite
+Sending data to Voice Satellite
 
 You: How will the weather be tomorrow?
 
@@ -500,7 +500,7 @@ STT test: result received successfully
 
 ## Microphone Hardware Test
 
-Before testing STT, the Waveshare audio input can be verified without using the Ai-Voice-Satellite Core.
+Before testing STT, the Waveshare audio input can be verified without using the Core.
 
 Enter:
 
@@ -516,7 +516,7 @@ If the result is:
 0 samples
 ```
 
-the problem is local to I2S / ES7210 rather than the Ai-Voice-Satellite Core.
+the problem is local to I2S / ES7210 rather than the Core.
 
 ## Speaker Hardware Test
 

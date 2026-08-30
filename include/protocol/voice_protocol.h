@@ -50,7 +50,7 @@ private:
     String authorizationHeader_;
     bool connected_ = false;
     bool ready_ = false;
-    String displayName_ = "Voice-Satellite";
+    String displayName_ = "Voice Satellite";
     bool binaryFragmentActive_ = false;
     const Board* board_ = nullptr;
     BinaryHandler binaryHandler_;

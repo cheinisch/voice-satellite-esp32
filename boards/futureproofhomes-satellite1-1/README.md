@@ -12,14 +12,14 @@ Experimentelles Boardprofil für den **FutureProofHomes Satellite1.1 Dev Kit / S
 - Action-/Volume-/Mute-Tasten
 - optionale Sensorik/mmWave
 
-## Stand in Ai-Voice-Satellite 0.1.x
+## Stand in Voice Satellite 0.1.x
 
 Implementiert:
 
 - eigenes PlatformIO-Target `satellite1-1`
 - XMOS Reset und Firmware-Versionsprobe über SPI
 - 48 kHz / 32-bit / Stereo I2S am Satellite1.1
-- Mikrofonpfad: 48 kHz Stereo -> 16 kHz PCM16 Mono für `ai-voice-satellite.voice.v1`
+- Mikrofonpfad: 48 kHz Stereo -> 16 kHz PCM16 Mono für `voice.satellite.v1`
 - TTS-Pfad: 16 kHz PCM16 Mono -> 48 kHz Stereo/32-bit I2S
 - direkte Action-Taste (GPIO0) als Push-to-talk
 - Status-LED GPIO45
@@ -33,7 +33,7 @@ Noch experimentell / nicht vollständig implementiert:
 - automatische XMOS-Firmwareinstallation
 - Umweltsensoren/mmWave
 
-**Wichtig:** Für den ersten Ai-Voice-Satellite-Test sollte der XMOS zuvor einmal mit der offiziellen FutureProofHomes-Firmware provisioniert worden sein. Ai-Voice-Satellite überschreibt die XMOS-Firmware nicht.
+**Wichtig:** Für den ersten Voice Satellite-Test sollte der XMOS zuvor einmal mit der offiziellen FutureProofHomes-Firmware provisioniert worden sein. Voice Satellite überschreibt die XMOS-Firmware nicht.
 
 Quellen für Pinout/Audioformat:
 

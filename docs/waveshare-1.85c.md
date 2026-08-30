@@ -37,4 +37,4 @@ The serial console prints I2C probes for ES8311 at `0x18` and ES7210 at `0x40`. 
 
 The microphone path (ES7210 + ESP32-S3 I2S RX) is a required part of board initialization.
 The ES8311 speaker is initialized lazily on the first TTS frame so a speaker problem cannot prevent STT tests.
-On boot the serial console prints each initialization stage and the `mic` command tests the local microphone path without Ai-Voice-Satellite/STT.
+On boot the serial console prints each initialization stage and the `mic` command tests the local microphone path without Voice Satellite/STT.

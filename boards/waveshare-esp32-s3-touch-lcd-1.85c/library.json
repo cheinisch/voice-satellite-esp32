@@ -1,5 +1,5 @@
 {
-  "name": "ai-voice-satellite-board-waveshare-esp32-s3-touch-lcd-1.85c",
+  "name": "voice-satellite-board-waveshare-esp32-s3-touch-lcd-1.85c",
   "version": "0.1.0",
   "build": {
     "srcDir": "src"

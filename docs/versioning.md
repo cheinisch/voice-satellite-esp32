@@ -1,6 +1,6 @@
 # Versionierung und Builds
 
-`ai-voice-satellite-satellite-esp32` verwendet zwei unabhängige Werte:
+`voice-satellite-esp32` verwendet zwei unabhängige Werte:
 
 - `VERSION`: SemVer der Firmware, z. B. `0.1.0`
 - `BUILD`: global fortlaufende numerische Buildnummer, z. B. `42`
@@ -8,11 +8,11 @@
 Beide Dateien liegen im Repository-Root und sind die einzige Quelle für diese Werte. Beim PlatformIO-Build liest `scripts/platformio_version.py` beide Dateien und setzt:
 
 ```cpp
-AIVOICE-SATELLITE_SATELLITE_VERSION
-AIVOICE-SATELLITE_SATELLITE_BUILD
+VOICE_SATELLITE_VERSION
+VOICE_SATELLITE_BUILD
 ```
 
-Dadurch erscheinen Version und Build in der seriellen Startausgabe und im `ai-voice-satellite.voice.v1`-Handshake, ohne dass `include/build_info.h` manuell synchronisiert werden muss.
+Dadurch erscheinen Version und Build in der seriellen Startausgabe und im `voice.satellite.v1`-Handshake, ohne dass `include/build_info.h` manuell synchronisiert werden muss.
 
 ## Normale Builds
 
@@ -85,9 +85,9 @@ Erzeugt werden unter anderem:
 Beispiel:
 
 ```text
-ai-voice-satellite-satellite-esp32-waveshare-esp32-s3-touch-lcd-1.85c-v0.2.0-build47-app.bin
-ai-voice-satellite-satellite-esp32-waveshare-esp32-s3-touch-lcd-1.85c-v0.2.0-build47-factory.bin
-ai-voice-satellite-satellite-esp32-waveshare-esp32-s3-touch-lcd-1.85c-v0.2.0-build47.zip
+voice-satellite-esp32-waveshare-esp32-s3-touch-lcd-1.85c-v0.2.0-build47-app.bin
+voice-satellite-esp32-waveshare-esp32-s3-touch-lcd-1.85c-v0.2.0-build47-factory.bin
+voice-satellite-esp32-waveshare-esp32-s3-touch-lcd-1.85c-v0.2.0-build47.zip
 SHA256SUMS.txt
 ```
 

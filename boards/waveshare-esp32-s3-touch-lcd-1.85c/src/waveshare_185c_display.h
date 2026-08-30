@@ -33,7 +33,7 @@ private:
     bool             ready_      = false;
     SatelliteState   state_      = SatelliteState::Booting;
     String           detail_;
-    String           displayName_ = "Voice-Satellite";
+    String           displayName_ = "Voice Satellite";
     uint32_t         lastClockAt_ = 0;
     int              lastMinute_  = -1;
     bool             displayOn_ = true;

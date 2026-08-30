@@ -1,5 +1,5 @@
 {
-  "name": "ai-voice-satellite-board-generic-esp32s3",
+  "name": "voice-satellite-board-generic-esp32s3",
   "version": "0.1.0",
   "build": { "srcDir": "src" }
 }

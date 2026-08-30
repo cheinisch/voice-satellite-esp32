@@ -33,7 +33,7 @@ bool FutureProofHomesSatellite11Board::begin() {
 
     if (!audio_.begin()) return false;
     Serial.println("Satellite1.1: Action-Taste = sprechen/stoppen");
-    Serial.println("Satellite1.1: 48-kHz-XMOS-Audio wird lokal auf Ai-Voice-Satellite PCM16/16kHz umgesetzt.");
+    Serial.println("Satellite1.1: 48-kHz-XMOS-Audio wird lokal auf Voice Satellite PCM16/16kHz umgesetzt.");
     Serial.println("Satellite1.1: TAS2780/Line-Out Initialisierung ist in 0.1.x noch experimentell.");
     return true;
 }
@@ -74,5 +74,5 @@ void FutureProofHomesSatellite11Board::showTranscript(const String& text) {
 }
 
 void FutureProofHomesSatellite11Board::showAssistant(const String& text) {
-    Serial.printf("[Satellite1.1] Ai-Voice-Satellite: %s\n", text.c_str());
+    Serial.printf("[Satellite1.1] Voice Satellite: %s\n", text.c_str());
 }

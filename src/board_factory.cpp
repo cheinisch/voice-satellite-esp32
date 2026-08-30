@@ -1,18 +1,18 @@
 #include "board/board_factory.h"
 
-#if defined(AIVOICE-SATELLITE_BOARD_FUTUREPROOFHOMES_SATELLITE1_1)
+#if defined(VOICE_SATELLITE_BOARD_FUTUREPROOFHOMES_SATELLITE1_1)
 #include <satellite1_1_board.h>
 Board& selectedBoard() {
     static FutureProofHomesSatellite11Board board;
     return board;
 }
-#elif defined(AIVOICE-SATELLITE_BOARD_WAVESHARE_185C)
+#elif defined(VOICE_SATELLITE_BOARD_WAVESHARE_185C)
 #include <waveshare_185c_board.h>
 Board& selectedBoard() {
     static Waveshare185CBoard board;
     return board;
 }
-#elif defined(AIVOICE-SATELLITE_BOARD_GENERIC_ESP32S3)
+#elif defined(VOICE_SATELLITE_BOARD_GENERIC_ESP32S3)
 #include <generic_esp32s3_board.h>
 Board& selectedBoard() {
     static GenericEsp32S3Board board;

@@ -1,4 +1,4 @@
-# ai-voice-satellite.voice.v1
+# voice.satellite.v1
 
 Der ESP32 verwendet denselben Voice-WebSocket-Vertrag wie der Linux-/ReSpeaker-Satellite.
 
@@ -26,7 +26,7 @@ Die 0.1.x-Firmware puffert die Push-to-talk-Aufnahme lokal, setzt einen PCM-WAV-
 
 ## Core → Client
 
-Primäre `ai-voice-satellite.voice.v1`-Events:
+Primäre `voice.satellite.v1`-Events:
 
 - `ready`
 - `session.started`
@@ -41,7 +41,7 @@ Zur Abwärtskompatibilität akzeptiert der ESP32 zusätzlich ältere Aliasnamen 
 
 ## Authentifizierung
 
-Wenn `AIVOICE-SATELLITE_CORE_TOKEN` gesetzt ist, sendet der ESP32 beim HTTP-WebSocket-Upgrade:
+Wenn `VOICE_SATELLITE_CORE_TOKEN` gesetzt ist, sendet der ESP32 beim HTTP-WebSocket-Upgrade:
 
 ```http
 Authorization: Bearer <token>

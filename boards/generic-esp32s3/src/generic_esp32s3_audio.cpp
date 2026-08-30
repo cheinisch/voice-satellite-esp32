@@ -1,5 +1,5 @@
 #include "generic_esp32s3_audio.h"
-#include "ai-voice-satellite_config.h"
+#include "voice_satellite_config.h"
 #include <ESP_I2S.h>
 #include <algorithm>
 
@@ -9,15 +9,15 @@ I2SClass spkI2S(I2S_NUM_1);
 }
 
 bool GenericEsp32S3Audio::begin() {
-    micI2S.setPins(AIVOICE-SATELLITE_GENERIC_MIC_BCLK_PIN, AIVOICE-SATELLITE_GENERIC_MIC_WS_PIN, -1, AIVOICE-SATELLITE_GENERIC_MIC_DATA_PIN, -1);
-    const int8_t micSlot = AIVOICE-SATELLITE_GENERIC_MIC_RIGHT_SLOT ? I2S_STD_SLOT_RIGHT : I2S_STD_SLOT_LEFT;
-    if (!micI2S.begin(I2S_MODE_STD, AIVOICE-SATELLITE_AUDIO_RATE, I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_MONO, micSlot)) {
+    micI2S.setPins(VOICE_SATELLITE_GENERIC_MIC_BCLK_PIN, VOICE_SATELLITE_GENERIC_MIC_WS_PIN, -1, VOICE_SATELLITE_GENERIC_MIC_DATA_PIN, -1);
+    const int8_t micSlot = VOICE_SATELLITE_GENERIC_MIC_RIGHT_SLOT ? I2S_STD_SLOT_RIGHT : I2S_STD_SLOT_LEFT;
+    if (!micI2S.begin(I2S_MODE_STD, VOICE_SATELLITE_AUDIO_RATE, I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_MONO, micSlot)) {
         Serial.printf("Generic MIC I2S Fehler: %d\n", micI2S.lastError());
         return false;
     }
 
-    spkI2S.setPins(AIVOICE-SATELLITE_GENERIC_SPK_BCLK_PIN, AIVOICE-SATELLITE_GENERIC_SPK_WS_PIN, AIVOICE-SATELLITE_GENERIC_SPK_DATA_PIN, -1, -1);
-    if (!spkI2S.begin(I2S_MODE_STD, AIVOICE-SATELLITE_AUDIO_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
+    spkI2S.setPins(VOICE_SATELLITE_GENERIC_SPK_BCLK_PIN, VOICE_SATELLITE_GENERIC_SPK_WS_PIN, VOICE_SATELLITE_GENERIC_SPK_DATA_PIN, -1, -1);
+    if (!spkI2S.begin(I2S_MODE_STD, VOICE_SATELLITE_AUDIO_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
         Serial.printf("Generic SPK I2S Fehler: %d\n", spkI2S.lastError());
         micI2S.end();
         return false;
@@ -34,7 +34,7 @@ size_t GenericEsp32S3Audio::readPcm16(int16_t* dst, size_t samples, uint32_t) {
     const size_t bytes = micI2S.readBytes(reinterpret_cast<char*>(raw), want * sizeof(int32_t));
     const size_t got = bytes / sizeof(int32_t);
     for (size_t i = 0; i < got; ++i) {
-        int32_t value = raw[i] >> AIVOICE-SATELLITE_GENERIC_MIC_SHIFT;
+        int32_t value = raw[i] >> VOICE_SATELLITE_GENERIC_MIC_SHIFT;
         value = std::max<int32_t>(-32768, std::min<int32_t>(32767, value));
         dst[i] = static_cast<int16_t>(value);
     }

@@ -1,5 +1,5 @@
 {
-  "name": "ai-voice-satellite-board-futureproofhomes-satellite1-1",
+  "name": "voice-satellite-board-futureproofhomes-satellite1-1",
   "version": "0.1.0",
   "build": { "srcDir": "src" }
 }
