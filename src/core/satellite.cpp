@@ -70,19 +70,22 @@ void Satellite::resumeWakeWordIfIdle() {
 }
 
 
-void Satellite::playWakeAckTone() {
+bool Satellite::playWakeAckTone() {
 #if VOICE_SATELLITE_WAKE_ACK_TONE_ENABLED
-    board_.audio().clearOutput();
     setUiState(SatelliteState::Listening, "Wakeword erkannt");
 
+    // Use the same proven speaker path and level as the interactive SPK test.
+    // A 110 ms / low-amplitude chirp was too easy to miss at the default 30 %
+    // volume and made failures look like the speaker path was broken.
     constexpr float TWO_PI_F = 6.28318530717958647692f;
-    constexpr float FREQ = 880.0f;
-    constexpr int16_t AMPLITUDE = 6500;
-    constexpr size_t BLOCK = 128;
-    constexpr uint32_t DURATION_MS = 110;
+    constexpr float FREQ = 1000.0f;
+    constexpr int16_t AMPLITUDE = 9000;
+    constexpr size_t BLOCK = 256;
+    constexpr uint32_t DURATION_MS = 220;
     constexpr size_t TOTAL = (VOICE_SATELLITE_AUDIO_RATE * DURATION_MS) / 1000;
     int16_t tone[BLOCK];
     size_t generated = 0;
+    size_t writtenTotal = 0;
 
     while (generated < TOTAL) {
         const size_t count = (TOTAL - generated) < BLOCK ? (TOTAL - generated) : BLOCK;
@@ -91,14 +94,28 @@ void Satellite::playWakeAckTone() {
                                 static_cast<float>(VOICE_SATELLITE_AUDIO_RATE);
             tone[n] = static_cast<int16_t>(sinf(phase) * AMPLITUDE);
         }
-        const size_t written = board_.audio().writePcm16(tone, count, 250);
-        if (written != count) break;
+        const size_t written = board_.audio().writePcm16(tone, count, 1000);
+        writtenTotal += written;
+        if (written != count) {
+            Serial.printf("Wakeword-Ton: nur %u/%u Samples geschrieben.\n",
+                          static_cast<unsigned>(written), static_cast<unsigned>(count));
+            break;
+        }
         generated += count;
         if (protocolStarted_) protocol_.loop();
         wifi_.loop();
     }
+
     board_.audio().clearOutput();
-    Serial.println("Wakeword: lokaler Bestätigungston abgespielt.");
+    if (writtenTotal > 0) {
+        Serial.printf("Wakeword-Ton: %u Samples ausgegeben.\n",
+                      static_cast<unsigned>(writtenTotal));
+        return true;
+    }
+    Serial.println("Wakeword-Ton: FEHLER - AudioIO hat 0 Samples angenommen.");
+    return false;
+#else
+    return false;
 #endif
 }
 
@@ -206,6 +223,9 @@ bool Satellite::requestWakeGreetingTts() {
 
     setUiState(SatelliteState::Speaking, "Begrüßung");
     const int status = http.POST(body);
+    const String contentType = http.header("Content-Type");
+    Serial.printf("Wake-Greeting: HTTP %d, Content-Type=%s, Content-Length=%d.\n",
+                  status, contentType.c_str(), http.getSize());
     if (status < 200 || status >= 300) {
         Serial.printf("Wake-Greeting: Core/TTS nicht verfügbar (HTTP %d), verwende Signalton.\n", status);
         http.end();
@@ -285,9 +305,14 @@ void Satellite::handleWakeWordTrigger() {
     // even if the Voice WebSocket has not reached READY yet.
     startLlmWakeupAsync();
 
+    // Give immediate local acoustic feedback. This uses the exact same audio
+    // path as the working SPK test, so the user does not have to wait for an
+    // HTTP/TTS roundtrip before knowing that the wakeword was accepted.
+    const bool ackPlayed = playWakeAckTone();
+    Serial.printf("Wakeword: Bestätigungston %s.\n", ackPlayed ? "OK" : "FEHLER");
+
     if (!protocol_.ready()) {
         Serial.println("Wakeword erkannt, aber Voice-Core ist noch nicht bereit.");
-        playWakeAckTone();
         awaitingResponse_ = false;
         resumeWakeWordIfIdle();
         return;
@@ -301,7 +326,7 @@ void Satellite::handleWakeWordTrigger() {
         return;
     }
 
-    playWakeAckTone();
+    Serial.println("Wake-Greeting nicht verfügbar; Aufnahme startet nach lokalem Bestätigungston.");
     wakeInteractionPending_ = false;
     startRecording(VOICE_SATELLITE_AUTO_TTS != 0);
 }

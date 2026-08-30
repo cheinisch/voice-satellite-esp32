@@ -57,7 +57,7 @@ constexpr int CENTER_HIT_R = 78;
 // Dedicated microphone mute/listen control on the left edge.  The visible
 // button stays compact while the touch radius is deliberately generous.
 constexpr int MIC_X     = 31;
-constexpr int MIC_Y     = 199;
+constexpr int MIC_Y     = 203;
 constexpr int MIC_R     = 20;
 constexpr int MIC_HIT_R = 34;
 
@@ -322,9 +322,10 @@ void Waveshare185CDisplay::renderClock(bool force) {
     // The clock intentionally sits a little lower than before. Logisoso 38 is
     // visibly larger and smoother than the old 3x bitmap font while leaving
     // enough air above the central status ring.
-    gfx_->fillRect(0, 8, 360, 72, BG);
-    // With the device name removed from the dashboard header, the clock can
-    // use the next larger Logisoso face without crowding the center ring.
+    // Keep the header clean: only the clock is shown here. The device name
+    // lives in the NET popup. Move the clock 4 px upward and use a face that
+    // is roughly 4 px larger than the previous Logisoso 38 rendering.
+    gfx_->fillRect(0, 4, 360, 68, BG);
     centeredFont(String(buf), 16, TEXT, u8g2_font_logisoso42_tr);
 }
 
@@ -417,17 +418,17 @@ void Waveshare185CDisplay::renderMicControl() {
     gfx_->fillCircle(MIC_X, MIC_Y, MIC_R, PANEL_2);
     gfx_->drawCircle(MIC_X, MIC_Y, MIC_R, BORDER);
 
-    // Small vector microphone icon so no additional icon font is required.
-    // Capsule / microphone body.
-    gfx_->drawRoundRect(MIC_X - 4, MIC_Y - 9, 8, 13, 4, accent);
+    // Larger vector microphone icon. The button itself was already enlarged;
+    // now the glyph grows with it instead of looking undersized.
+    gfx_->drawRoundRect(MIC_X - 5, MIC_Y - 11, 10, 16, 5, accent);
     // Support / stem.
-    gfx_->drawLine(MIC_X - 8, MIC_Y - 1, MIC_X - 8, MIC_Y + 1, accent);
-    gfx_->drawLine(MIC_X + 8, MIC_Y - 1, MIC_X + 8, MIC_Y + 1, accent);
-    gfx_->drawLine(MIC_X - 8, MIC_Y + 1, MIC_X - 5, MIC_Y + 6, accent);
-    gfx_->drawLine(MIC_X + 8, MIC_Y + 1, MIC_X + 5, MIC_Y + 6, accent);
-    gfx_->drawLine(MIC_X - 5, MIC_Y + 6, MIC_X + 5, MIC_Y + 6, accent);
-    gfx_->drawLine(MIC_X, MIC_Y + 8, MIC_X, MIC_Y + 12, accent);
-    gfx_->drawLine(MIC_X - 5, MIC_Y + 12, MIC_X + 5, MIC_Y + 12, accent);
+    gfx_->drawLine(MIC_X - 10, MIC_Y - 2, MIC_X - 10, MIC_Y + 2, accent);
+    gfx_->drawLine(MIC_X + 10, MIC_Y - 2, MIC_X + 10, MIC_Y + 2, accent);
+    gfx_->drawLine(MIC_X - 10, MIC_Y + 2, MIC_X - 6, MIC_Y + 8, accent);
+    gfx_->drawLine(MIC_X + 10, MIC_Y + 2, MIC_X + 6, MIC_Y + 8, accent);
+    gfx_->drawLine(MIC_X - 6, MIC_Y + 8, MIC_X + 6, MIC_Y + 8, accent);
+    gfx_->drawLine(MIC_X, MIC_Y + 8, MIC_X, MIC_Y + 14, accent);
+    gfx_->drawLine(MIC_X - 6, MIC_Y + 14, MIC_X + 6, MIC_Y + 14, accent);
 
     if (muted) {
         gfx_->drawLine(MIC_X - 11, MIC_Y - 12, MIC_X + 11, MIC_Y + 12, RED);
@@ -513,7 +514,7 @@ void Waveshare185CDisplay::renderNetworkPopup() {
         y += 20;
     };
 
-    row("GERAET", compact(displayName_, 22), TEXT);
+    row("GERAET", compact(displayName_, 24), TEXT);
     row("WLAN", ssid, TEXT);
     row("IP", ip, TEXT);
     row("GW", gateway, TEXT);

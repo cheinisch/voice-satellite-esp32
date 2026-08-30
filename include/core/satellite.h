@@ -59,7 +59,7 @@ private:
     void resumeWakeWordIfIdle();
     void handleWakeWordTrigger();
     bool requestWakeGreetingTts();
-    void playWakeAckTone();
+    bool playWakeAckTone();
     void startLlmWakeupAsync();
     static void llmWakeupTaskEntry(void* arg);
     void runLlmWakeupRequest();
