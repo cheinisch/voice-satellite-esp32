@@ -22,6 +22,7 @@ public:
     void toggleNetworkPopup();
     bool networkPopupVisible() const { return networkPopupVisible_; }
     void setVolumePercent(uint8_t percent);
+    void setDisplayName(const String& name);
     void toggleDisplay();
     void setDisplayEnabled(bool enabled);
     bool displayEnabled() const { return displayOn_; }
@@ -32,6 +33,7 @@ private:
     bool             ready_      = false;
     SatelliteState   state_      = SatelliteState::Booting;
     String           detail_;
+    String           displayName_ = "Voice-Satellite";
     uint32_t         lastClockAt_ = 0;
     int              lastMinute_  = -1;
     bool             displayOn_ = true;

@@ -41,6 +41,8 @@ public:
     virtual bool consumeVoiceTrigger() = 0;
     // Optional separate UI control. Defaults to unsupported on headless boards.
     virtual bool consumeMuteToggle() { return false; }
+    // Optional display branding supplied by the Core. Headless boards ignore it.
+    virtual void setDisplayName(const String& name) { (void)name; }
 
     virtual void setState(SatelliteState state, const String& detail = String()) = 0;
     virtual void showTranscript(const String& text) = 0;

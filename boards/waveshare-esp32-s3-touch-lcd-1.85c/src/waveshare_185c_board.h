@@ -15,6 +15,7 @@ public:
     AudioIO& audio() override { return audio_; }
     bool consumeVoiceTrigger() override;
     bool consumeMuteToggle() override;
+    void setDisplayName(const String& name) override;
     void setState(SatelliteState state, const String& detail) override;
     void showTranscript(const String& text) override;
     void showAssistant(const String& text) override;

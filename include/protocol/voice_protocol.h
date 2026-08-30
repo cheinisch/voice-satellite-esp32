@@ -27,6 +27,7 @@ public:
     void loop();
     bool connected() const { return connected_; }
     bool ready() const { return ready_; }
+    const String& displayName() const { return displayName_; }
 
     void sendSessionStart(bool autoTts);
     bool sendWav(const uint8_t* data, size_t length);
@@ -49,6 +50,7 @@ private:
     String authorizationHeader_;
     bool connected_ = false;
     bool ready_ = false;
+    String displayName_ = "Voice-Satellite";
     bool binaryFragmentActive_ = false;
     const Board* board_ = nullptr;
     BinaryHandler binaryHandler_;

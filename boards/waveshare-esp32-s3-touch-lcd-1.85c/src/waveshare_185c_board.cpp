@@ -113,6 +113,10 @@ bool Waveshare185CBoard::consumeMuteToggle() {
     return value;
 }
 
+void Waveshare185CBoard::setDisplayName(const String& name) {
+    display_.setDisplayName(name);
+}
+
 void Waveshare185CBoard::setState(SatelliteState state, const String& detail) {
     display_.showState(state, detail);
 }

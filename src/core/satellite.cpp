@@ -1,13 +1,13 @@
 #include "core/satellite.h"
 #include "build_info.h"
-#include "ai-voice-satellite_config.h"
+#include "jarvis_config.h"
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 #include <cstring>
 #include <cmath>
 
 namespace {
-constexpr size_t CHUNK_SAMPLES = (AIVOICE-SATELLITE_AUDIO_RATE * AIVOICE-SATELLITE_AUDIO_CHUNK_MS) / 1000;
+constexpr size_t CHUNK_SAMPLES = (JARVIS_AUDIO_RATE * JARVIS_AUDIO_CHUNK_MS) / 1000;
 constexpr size_t WAV_HEADER_BYTES = 44;
 static_assert(CHUNK_SAMPLES > 0, "audio chunk must contain samples");
 int16_t audioChunk[CHUNK_SAMPLES];
@@ -53,7 +53,7 @@ void Satellite::suspendWakeWord() {
     wakeWordSuspended_ = true;
     // ESP_SR pauses its feed/detect tasks asynchronously via an event group.
     // Give the feed task one audio frame to release the shared I2S reader
-    // before Ai-Voice-Satellite starts direct recording or switches the bus to TX.
+    // before Jarvis starts direct recording or switches the bus to TX.
     delay(20);
 }
 
@@ -95,7 +95,7 @@ bool Satellite::begin() {
         Serial.println("WARNUNG: Board-Initialisierung unvollständig; Netzwerk/Protokoll bleiben für Diagnose aktiv.");
     }
 
-#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
+#if JARVIS_WAKEWORD_ENABLED
     if (boardOk) {
         wakeWordEnabled_ = board_.audio().beginWakeWord();
         wakeWordSuspended_ = false;
@@ -125,7 +125,7 @@ bool Satellite::begin() {
 
 void Satellite::ensureProtocol() {
     if (!wifi_.connected() || protocolStarted_) return;
-    setUiState(SatelliteState::ConnectingCore, "Ai-Voice-Satellite Core");
+    setUiState(SatelliteState::ConnectingCore, "Jarvis Core");
     protocol_.begin(board_);
     protocolStarted_ = true;
 }
@@ -133,7 +133,7 @@ void Satellite::ensureProtocol() {
 bool Satellite::allocateRecordingBuffer() {
     freeRecordingBuffer();
 
-    const size_t maxSamples = (static_cast<size_t>(AIVOICE-SATELLITE_AUDIO_RATE) * AIVOICE-SATELLITE_RECORD_MS) / 1000;
+    const size_t maxSamples = (static_cast<size_t>(JARVIS_AUDIO_RATE) * JARVIS_RECORD_MS) / 1000;
     recordingCapacityBytes_ = WAV_HEADER_BYTES + maxSamples * sizeof(int16_t);
 
     if (psramFound()) {
@@ -176,10 +176,10 @@ void Satellite::finalizeWavHeader() {
     memcpy(h + 12, "fmt ", 4);
     putLe32(h + 16, 16);
     putLe16(h + 20, 1); // PCM
-    putLe16(h + 22, AIVOICE-SATELLITE_AUDIO_CHANNELS);
-    putLe32(h + 24, AIVOICE-SATELLITE_AUDIO_RATE);
-    putLe32(h + 28, AIVOICE-SATELLITE_AUDIO_RATE * AIVOICE-SATELLITE_AUDIO_CHANNELS * sizeof(int16_t));
-    putLe16(h + 32, AIVOICE-SATELLITE_AUDIO_CHANNELS * sizeof(int16_t));
+    putLe16(h + 22, JARVIS_AUDIO_CHANNELS);
+    putLe32(h + 24, JARVIS_AUDIO_RATE);
+    putLe32(h + 28, JARVIS_AUDIO_RATE * JARVIS_AUDIO_CHANNELS * sizeof(int16_t));
+    putLe16(h + 32, JARVIS_AUDIO_CHANNELS * sizeof(int16_t));
     putLe16(h + 34, 16);
     memcpy(h + 36, "data", 4);
     putLe32(h + 40, static_cast<uint32_t>(recordingPcmBytes_));
@@ -217,16 +217,16 @@ void Satellite::startRecording(bool autoTts) {
     if (ttsTestActive_) {
         Serial.println();
         Serial.println("=== TTS ROUNDTRIP TEST ===");
-        Serial.println("Sprich eine Frage. Ai-Voice-Satellite soll die Antwort anschließend ausgeben.");
+        Serial.println("Sprich eine Frage. Jarvis soll die Antwort anschließend ausgeben.");
     } else if (sttTestActive_) {
         Serial.println();
         Serial.println("=== STT TEST ===");
         Serial.println("Sprich jetzt in das Mikrofon. Dieser Test fordert absichtlich kein TTS an.");
     }
     Serial.printf("Aufnahme läuft (max. %lums, auto_tts=%s, silence=%s)...\n",
-                  static_cast<unsigned long>(AIVOICE-SATELLITE_RECORD_MS),
+                  static_cast<unsigned long>(JARVIS_RECORD_MS),
                   autoTts ? "ja" : "nein",
-                  AIVOICE-SATELLITE_SILENCE_DETECTION ? "ja" : "nein");
+                  JARVIS_SILENCE_DETECTION ? "ja" : "nein");
 }
 
 void Satellite::stopRecording() {
@@ -245,9 +245,9 @@ void Satellite::stopRecording() {
 
     finalizeWavHeader();
     const size_t wavBytes = WAV_HEADER_BYTES + recordingPcmBytes_;
-    Serial.printf("Sende WAV an Ai-Voice-Satellite: %u Bytes, %.2f s\n",
+    Serial.printf("Sende WAV an Jarvis: %u Bytes, %.2f s\n",
                   static_cast<unsigned>(wavBytes),
-                  static_cast<double>(recordingPcmBytes_) / (AIVOICE-SATELLITE_AUDIO_RATE * AIVOICE-SATELLITE_AUDIO_CHANNELS * sizeof(int16_t)));
+                  static_cast<double>(recordingPcmBytes_) / (JARVIS_AUDIO_RATE * JARVIS_AUDIO_CHANNELS * sizeof(int16_t)));
 
     if (!protocol_.sendWav(recordingBuffer_, wavBytes)) {
         Serial.println("STT: WAV konnte nicht gesendet werden.");
@@ -261,9 +261,9 @@ void Satellite::stopRecording() {
 
     protocol_.sendAudioCommit();
     awaitingResponse_ = true;
-    Serial.println("Sende Daten an Ai-Voice-Satellite");
+    Serial.println("Sende Daten an Jarvis");
     freeRecordingBuffer();
-    setUiState(SatelliteState::Processing, "Sende Daten an Ai-Voice-Satellite");
+    setUiState(SatelliteState::Processing, "Sende Daten an Jarvis");
 }
 
 void Satellite::pumpRecording() {
@@ -279,26 +279,26 @@ void Satellite::pumpRecording() {
             recordingPcmBytes_ += copyBytes;
         }
 
-#if AIVOICE-SATELLITE_SILENCE_DETECTION
+#if JARVIS_SILENCE_DETECTION
         const uint32_t now = millis();
-        if (now - recordingStartedAt_ >= AIVOICE-SATELLITE_SILENCE_ARM_MS) {
+        if (now - recordingStartedAt_ >= JARVIS_SILENCE_ARM_MS) {
             uint64_t sumAbs = 0;
             for (size_t n = 0; n < got; ++n) {
                 const int32_t sample = audioChunk[n];
                 sumAbs += static_cast<uint32_t>(sample < 0 ? -sample : sample);
             }
             const uint32_t meanAbs = got ? static_cast<uint32_t>(sumAbs / got) : 0;
-            if (meanAbs >= AIVOICE-SATELLITE_SILENCE_THRESHOLD) {
+            if (meanAbs >= JARVIS_SILENCE_THRESHOLD) {
                 silenceSpeechSeen_ = true;
                 silenceVoicedSamples_ += static_cast<uint32_t>(got);
                 silenceLastVoiceAt_ = now;
             }
 
             const uint32_t voicedMs = static_cast<uint32_t>(
-                (static_cast<uint64_t>(silenceVoicedSamples_) * 1000ULL) / AIVOICE-SATELLITE_AUDIO_RATE);
+                (static_cast<uint64_t>(silenceVoicedSamples_) * 1000ULL) / JARVIS_AUDIO_RATE);
             if (silenceSpeechSeen_ &&
-                voicedMs >= AIVOICE-SATELLITE_SILENCE_MIN_SPEECH_MS &&
-                now - silenceLastVoiceAt_ >= AIVOICE-SATELLITE_SILENCE_TIMEOUT_MS) {
+                voicedMs >= JARVIS_SILENCE_MIN_SPEECH_MS &&
+                now - silenceLastVoiceAt_ >= JARVIS_SILENCE_TIMEOUT_MS) {
                 Serial.printf("Silence Detection: %lums Stille nach %lums Sprache -> Aufnahme Ende.\n",
                               static_cast<unsigned long>(now - silenceLastVoiceAt_),
                               static_cast<unsigned long>(voicedMs));
@@ -313,7 +313,7 @@ void Satellite::pumpRecording() {
             return;
         }
     }
-    if (millis() - recordingStartedAt_ >= AIVOICE-SATELLITE_RECORD_MS) stopRecording();
+    if (millis() - recordingStartedAt_ >= JARVIS_RECORD_MS) stopRecording();
 }
 
 void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
@@ -343,7 +343,7 @@ void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
                 if (ttsReceiving_ && ttsBufferBytes_ == 0) {
                     Serial.println("TTS Diagnose: Core trennte vor dem ersten Binär-Callback.");
                     Serial.println("TTS Diagnose: arduinoWebSockets begrenzt eingehende Frames standardmäßig auf 15 KiB;");
-                    Serial.println("der Ai-Voice-Satellite-Build patcht große TTS-Frames deshalb auf PSRAM-Unterstützung.");
+                    Serial.println("der Jarvis-Build patcht große TTS-Frames deshalb auf PSRAM-Unterstützung.");
                 }
                 ttsReceiving_ = false;
                 ttsPlaybackPending_ = false;
@@ -429,7 +429,7 @@ void Satellite::onVoiceEvent(VoiceEvent event, const String& text) {
 
 
 void Satellite::resetTtsPlayback(uint32_t sampleRate, uint8_t channels) {
-    ttsInputRate_ = (sampleRate >= 8000 && sampleRate <= 96000) ? sampleRate : AIVOICE-SATELLITE_AUDIO_RATE;
+    ttsInputRate_ = (sampleRate >= 8000 && sampleRate <= 96000) ? sampleRate : JARVIS_AUDIO_RATE;
     ttsInputChannels_ = (channels == 2) ? 2 : 1;
     ttsResampleAccumulator_ = 0;
     ttsInputBytes_ = 0;
@@ -583,7 +583,7 @@ bool Satellite::prepareTtsPlayback() {
     ttsPcmEnd_ = pcmOffset + pcmBytes;
     ttsPlaybackPending_ = false;
     ttsPlaybackActive_ = true;
-    setUiState(SatelliteState::Speaking, "Ai-Voice-Satellite spricht");
+    setUiState(SatelliteState::Speaking, "Jarvis spricht");
     return true;
 }
 
@@ -622,7 +622,7 @@ void Satellite::pumpTtsPlayback() {
             mono = (static_cast<int32_t>(left) + static_cast<int32_t>(right)) / 2;
         }
 
-        ttsResampleAccumulator_ += AIVOICE-SATELLITE_AUDIO_RATE;
+        ttsResampleAccumulator_ += JARVIS_AUDIO_RATE;
         while (ttsResampleAccumulator_ >= ttsInputRate_ && outCount < OUTPUT_SAMPLES) {
             ttsResampleAccumulator_ -= ttsInputRate_;
             out[outCount++] = static_cast<int16_t>(mono);
@@ -722,14 +722,14 @@ void Satellite::runSpeakerTest() {
     constexpr int16_t AMPLITUDE = 9000;
     constexpr size_t BLOCK = 256;
     int16_t tone[BLOCK];
-    const size_t totalSamples = AIVOICE-SATELLITE_AUDIO_RATE;
+    const size_t totalSamples = JARVIS_AUDIO_RATE;
     size_t generated = 0;
     size_t writtenTotal = 0;
 
     while (generated < totalSamples) {
         const size_t count = (totalSamples - generated) < BLOCK ? (totalSamples - generated) : BLOCK;
         for (size_t n = 0; n < count; ++n) {
-            const float phase = TEST_TONE_TWO_PI * FREQ * static_cast<float>(generated + n) / static_cast<float>(AIVOICE-SATELLITE_AUDIO_RATE);
+            const float phase = TEST_TONE_TWO_PI * FREQ * static_cast<float>(generated + n) / static_cast<float>(JARVIS_AUDIO_RATE);
             tone[n] = static_cast<int16_t>(sinf(phase) * AMPLITUDE);
         }
         const size_t written = board_.audio().writePcm16(tone, count, 1000);
@@ -832,7 +832,7 @@ void Satellite::printConsoleHelp() const {
     Serial.println("  mic        + ENTER  -> 2s Mikrofon/I2S lokal testen");
     Serial.println("  spk        + ENTER  -> 1s Testton lokal über ES8311/Lautsprecher");
     Serial.println("  stt        + ENTER  -> STT-only Test (kein TTS vom Core)");
-    Serial.println("  tts        + ENTER  -> kompletter STT -> Ai-Voice-Satellite -> TTS Roundtrip");
+    Serial.println("  tts        + ENTER  -> kompletter STT -> Jarvis -> TTS Roundtrip");
     Serial.println("  stop       + ENTER  -> Aufnahme vorzeitig beenden");
     Serial.println("  mute       + ENTER  -> Mikrofon stumm / zuhören umschalten");
     Serial.println("  wake       + ENTER  -> Wakeword-Status anzeigen");
@@ -862,7 +862,7 @@ void Satellite::pollSerialConsole() {
             runSpeakerTest();
         } else if (serialCommand_ == "stt" || serialCommand_ == "r") {
             if (!protocol_.ready()) {
-                Serial.println("STT Test nicht möglich: Ai-Voice-Satellite Core ist noch nicht bereit.");
+                Serial.println("STT Test nicht möglich: Jarvis Core ist noch nicht bereit.");
             } else if (recording_) {
                 Serial.println("STT Test nicht gestartet: Aufnahme läuft bereits.");
             } else {
@@ -872,7 +872,7 @@ void Satellite::pollSerialConsole() {
             }
         } else if (serialCommand_ == "tts") {
             if (!protocol_.ready()) {
-                Serial.println("TTS Test nicht möglich: Ai-Voice-Satellite Core ist noch nicht bereit.");
+                Serial.println("TTS Test nicht möglich: Jarvis Core ist noch nicht bereit.");
             } else if (recording_) {
                 Serial.println("TTS Test nicht gestartet: Aufnahme läuft bereits.");
             } else {
@@ -917,7 +917,7 @@ void Satellite::loop() {
         if (muted_) {
             Serial.println("Wakeword erkannt, aber Mikrofon ist stumm.");
         } else if (!protocol_.ready()) {
-            Serial.println("Wakeword erkannt, aber Ai-Voice-Satellite Core ist nicht bereit.");
+            Serial.println("Wakeword erkannt, aber Jarvis Core ist nicht bereit.");
             awaitingResponse_ = false;
             resumeWakeWordIfIdle();
         } else if (recording_ || awaitingResponse_ || ttsReceiving_ || ttsPlaybackActive_) {
@@ -927,13 +927,13 @@ void Satellite::loop() {
             // The ESP_SR callback has already requested PAUSE_FEED. Allow the
             // background feed task to stop reading the shared I2S stream.
             delay(20);
-            startRecording(AIVOICE-SATELLITE_AUTO_TTS != 0);
+            startRecording(JARVIS_AUTO_TTS != 0);
         }
     }
 
     if (board_.consumeVoiceTrigger()) {
         if (recording_) stopRecording();
-        else startRecording(AIVOICE-SATELLITE_AUTO_TTS != 0);
+        else startRecording(JARVIS_AUTO_TTS != 0);
     }
 
     pumpRecording();
