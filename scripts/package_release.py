@@ -50,7 +50,7 @@ def main() -> int:
     if missing:
         raise RuntimeError("Missing PlatformIO build output:\n- " + "\n- ".join(missing))
 
-    stem = f"jarvis-satellite-esp32-{args.board}-v{version}-build{build}"
+    stem = f"ai-voice-satellite-satellite-esp32-{args.board}-v{version}-build{build}"
     package_dir = dist / stem
     package_dir.mkdir(parents=True)
 
@@ -88,7 +88,7 @@ def main() -> int:
     )
 
     manifest = {
-        "project": "jarvis-satellite-esp32",
+        "project": "ai-voice-satellite-satellite-esp32",
         "board": args.board,
         "platformio_environment": args.environment,
         "chip": "esp32s3",
@@ -107,7 +107,7 @@ def main() -> int:
     )
 
     flashing_text = (
-        f"Jarvis ESP32 Satellite - {args.board} firmware\n"
+        f"Ai-Voice-Satellite ESP32 Satellite - {args.board} firmware\n"
         f"Version {version} Build {build}\n\n"
         "Factory image (new/fully erased board):\n"
         f"  esptool --chip esp32s3 write-flash 0x0 {merged.name}\n\n"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare a Jarvis ESP32 firmware release by updating VERSION and BUILD."""
+"""Prepare a Ai-Voice-Satellite ESP32 firmware release by updating VERSION and BUILD."""
 
 from __future__ import annotations
 

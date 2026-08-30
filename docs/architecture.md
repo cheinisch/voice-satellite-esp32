@@ -1,6 +1,6 @@
 # Architektur
 
-`jarvis-satellite-esp32` ist ein separates Embedded-Repository.
+`ai-voice-satellite-satellite-esp32` ist ein separates Embedded-Repository.
 
 ```text
 src/core + src/network + src/protocol

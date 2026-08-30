@@ -1,5 +1,5 @@
 #include "generic_esp32s3_board.h"
-#include "jarvis_config.h"
+#include "ai-voice-satellite_config.h"
 
 namespace {
 const char* stateName(SatelliteState state) {
@@ -19,14 +19,14 @@ const char* stateName(SatelliteState state) {
 }
 
 bool GenericEsp32S3Board::begin() {
-    pinMode(JARVIS_GENERIC_BUTTON_PIN, INPUT_PULLUP);
+    pinMode(AIVOICE-SATELLITE_GENERIC_BUTTON_PIN, INPUT_PULLUP);
     if (!audio_.begin()) return false;
     Serial.println("Generic ESP32-S3: BOOT-Taste = sprechen/stoppen");
     return true;
 }
 
 void GenericEsp32S3Board::loop() {
-    const bool pressed = digitalRead(JARVIS_GENERIC_BUTTON_PIN) == LOW;
+    const bool pressed = digitalRead(AIVOICE-SATELLITE_GENERIC_BUTTON_PIN) == LOW;
     const uint32_t now = millis();
     if (pressed != lastButton_ && now - lastEdgeAt_ > 30) {
         lastEdgeAt_ = now;
@@ -49,4 +49,4 @@ void GenericEsp32S3Board::setState(SatelliteState state, const String& detail) {
     Serial.printf("[%s] %s\n", stateName(state), detail.c_str());
 }
 void GenericEsp32S3Board::showTranscript(const String& text) { Serial.printf("[Display:N/A] Du: %s\n", text.c_str()); }
-void GenericEsp32S3Board::showAssistant(const String& text) { Serial.printf("[Display:N/A] Jarvis: %s\n", text.c_str()); }
+void GenericEsp32S3Board::showAssistant(const String& text) { Serial.printf("[Display:N/A] Ai-Voice-Satellite: %s\n", text.c_str()); }

@@ -1,6 +1,6 @@
 #include "protocol/voice_protocol.h"
 #include "build_info.h"
-#include "jarvis_config.h"
+#include "ai-voice-satellite_config.h"
 #include <ArduinoJson.h>
 #include <cstring>
 
@@ -13,7 +13,7 @@ const char* firstString(JsonDocument& doc, const char* a, const char* b) {
 }
 
 const char* normalizedTtsQuality() {
-    const String configured = String(JARVIS_TTS_QUALITY);
+    const String configured = String(AIVOICE-SATELLITE_TTS_QUALITY);
     if (!configured.length()) return "low";
 
     if (configured.equalsIgnoreCase("low")) return "low";
@@ -23,7 +23,7 @@ const char* normalizedTtsQuality() {
     if (configured.equalsIgnoreCase("high")) return "high";
 
     Serial.printf(
-        "WARNUNG: Unbekannte JARVIS_TTS_QUALITY '%s'; verwende low.\n",
+        "WARNUNG: Unbekannte AIVOICE-SATELLITE_TTS_QUALITY '%s'; verwende low.\n",
         configured.c_str()
     );
     return "low";
@@ -35,23 +35,23 @@ void VoiceProtocol::begin(const Board& board) {
 
     // ESP32 clients can send an Authorization header during the HTTP WebSocket
     // upgrade. Keep the token out of the protocol payload and out of logs.
-    if (strlen(JARVIS_CORE_TOKEN) > 0 && strcmp(JARVIS_CORE_TOKEN, "CHANGE_ME") != 0 && strcmp(JARVIS_CORE_TOKEN, "jv_DEIN_TOKEN") != 0) {
+    if (strlen(AIVOICE-SATELLITE_CORE_TOKEN) > 0 && strcmp(AIVOICE-SATELLITE_CORE_TOKEN, "CHANGE_ME") != 0 && strcmp(AIVOICE-SATELLITE_CORE_TOKEN, "jv_DEIN_TOKEN") != 0) {
         authorizationHeader_ = "Authorization: Bearer ";
-        authorizationHeader_ += JARVIS_CORE_TOKEN;
+        authorizationHeader_ += AIVOICE-SATELLITE_CORE_TOKEN;
         ws_.setExtraHeaders(authorizationHeader_.c_str());
         Serial.println("Core-Authentifizierung: Bearer-Token konfiguriert");
     } else {
         authorizationHeader_ = "";
         ws_.setExtraHeaders("");
-        Serial.println("WARNUNG: Kein Jarvis Core Token konfiguriert.");
+        Serial.println("WARNUNG: Kein Ai-Voice-Satellite Core Token konfiguriert.");
     }
 
-#if JARVIS_CORE_TLS
-    ws_.beginSSL(JARVIS_CORE_HOST, JARVIS_CORE_PORT, JARVIS_CORE_PATH);
+#if AIVOICE-SATELLITE_CORE_TLS
+    ws_.beginSSL(AIVOICE-SATELLITE_CORE_HOST, AIVOICE-SATELLITE_CORE_PORT, AIVOICE-SATELLITE_CORE_PATH);
 #else
-    ws_.begin(JARVIS_CORE_HOST, JARVIS_CORE_PORT, JARVIS_CORE_PATH);
+    ws_.begin(AIVOICE-SATELLITE_CORE_HOST, AIVOICE-SATELLITE_CORE_PORT, AIVOICE-SATELLITE_CORE_PATH);
 #endif
-    ws_.setReconnectInterval(JARVIS_RECONNECT_MS);
+    ws_.setReconnectInterval(AIVOICE-SATELLITE_RECONNECT_MS);
     ws_.enableHeartbeat(15000, 3000, 2);
     ws_.onEvent([this](WStype_t type, uint8_t* payload, size_t length) {
         onEvent(type, payload, length);
@@ -71,9 +71,9 @@ void VoiceProtocol::onEvent(WStype_t type, uint8_t* payload, size_t length) {
         case WStype_CONNECTED:
             connected_ = true;
             ready_ = false;
-            Serial.printf("Core verbunden: %s:%d%s\n", JARVIS_CORE_HOST, JARVIS_CORE_PORT, JARVIS_CORE_PATH);
+            Serial.printf("Core verbunden: %s:%d%s\n", AIVOICE-SATELLITE_CORE_HOST, AIVOICE-SATELLITE_CORE_PORT, AIVOICE-SATELLITE_CORE_PATH);
             emit(VoiceEvent::Connected);
-#if JARVIS_SEND_HELLO
+#if AIVOICE-SATELLITE_SEND_HELLO
             sendHello();
 #endif
             break;
@@ -113,12 +113,12 @@ void VoiceProtocol::onEvent(WStype_t type, uint8_t* payload, size_t length) {
 void VoiceProtocol::sendHello() {
     JsonDocument doc;
     doc["type"] = "hello";
-    doc["protocol"] = JARVIS_PROTOCOL_NAME;
-    doc["client"] = JARVIS_CLIENT_NAME;
-    doc["client_version"] = JARVIS_SATELLITE_VERSION;
-    doc["client_build"] = JARVIS_SATELLITE_BUILD;
-    doc["satellite_id"] = JARVIS_SATELLITE_ID;
-    doc["satellite_name"] = JARVIS_SATELLITE_NAME;
+    doc["protocol"] = AIVOICE-SATELLITE_PROTOCOL_NAME;
+    doc["client"] = AIVOICE-SATELLITE_CLIENT_NAME;
+    doc["client_version"] = AIVOICE-SATELLITE_SATELLITE_VERSION;
+    doc["client_build"] = AIVOICE-SATELLITE_SATELLITE_BUILD;
+    doc["satellite_id"] = AIVOICE-SATELLITE_SATELLITE_ID;
+    doc["satellite_name"] = AIVOICE-SATELLITE_SATELLITE_NAME;
     doc["transport"] = "websocket";
 
     if (board_) {
@@ -137,8 +137,8 @@ void VoiceProtocol::sendHello() {
 
     JsonObject audio = doc["audio"].to<JsonObject>();
     audio["format"] = "pcm_s16le";
-    audio["sample_rate"] = JARVIS_AUDIO_RATE;
-    audio["channels"] = JARVIS_AUDIO_CHANNELS;
+    audio["sample_rate"] = AIVOICE-SATELLITE_AUDIO_RATE;
+    audio["channels"] = AIVOICE-SATELLITE_AUDIO_CHANNELS;
 
     String out;
     serializeJson(doc, out);
@@ -188,7 +188,7 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
     if (!strcmp(type, "hello") || !strcmp(type, "hello_ack") || !strcmp(type, "welcome") || !strcmp(type, "ready")) {
         const bool wasReady = ready_;
         ready_ = true;
-        const String detail = strlen(protocol) ? String(protocol) : String(JARVIS_PROTOCOL_NAME);
+        const String detail = strlen(protocol) ? String(protocol) : String(AIVOICE-SATELLITE_PROTOCOL_NAME);
         if (!wasReady) {
             Serial.printf("Core bereit: %s\n", detail.c_str());
             emit(VoiceEvent::Ready, detail);
@@ -197,8 +197,8 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         const char* minVersion = doc["minimum_client_version"].as<const char*>();
         const char* latestVersion = doc["latest_client_version"].as<const char*>();
         if (minVersion) Serial.printf("Min. Satellite-Version: %s\n", minVersion);
-        if (latestVersion && strcmp(latestVersion, JARVIS_SATELLITE_VERSION) != 0) {
-            Serial.printf("Update verfügbar: %s (installiert %s)\n", latestVersion, JARVIS_SATELLITE_VERSION);
+        if (latestVersion && strcmp(latestVersion, AIVOICE-SATELLITE_SATELLITE_VERSION) != 0) {
+            Serial.printf("Update verfügbar: %s (installiert %s)\n", latestVersion, AIVOICE-SATELLITE_SATELLITE_VERSION);
         }
         return;
     }
@@ -223,7 +223,7 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
 
     if (!strcmp(type, "assistant.final") || !strcmp(type, "assistant") || !strcmp(type, "assistant_text") || !strcmp(type, "response")) {
         const String value = firstString(doc, "text", "response");
-        Serial.printf("Jarvis: %s\n", value.c_str());
+        Serial.printf("Ai-Voice-Satellite: %s\n", value.c_str());
         emit(VoiceEvent::Assistant, value);
         return;
     }
@@ -298,7 +298,7 @@ void VoiceProtocol::sendSessionStart(bool autoTts) {
 
     Serial.printf(
         "TTS Profil: %s (Core quality=%s, Streaming=ja, ACK=ja, Chunk=%u Bytes)\n",
-        JARVIS_TTS_QUALITY,
+        AIVOICE-SATELLITE_TTS_QUALITY,
         ttsQuality,
         12U * 1024U
     );
@@ -325,7 +325,7 @@ void VoiceProtocol::sendPing() {
     if (!connected_) return;
     JsonDocument doc;
     doc["type"] = "ping";
-    doc["satellite_id"] = JARVIS_SATELLITE_ID;
+    doc["satellite_id"] = AIVOICE-SATELLITE_SATELLITE_ID;
     String out;
     serializeJson(doc, out);
     sendJson(out);

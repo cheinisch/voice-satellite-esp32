@@ -2,11 +2,11 @@
 
 arduinoWebSockets 2.7.x limits a single inbound frame to 15 KiB and allocates
 that complete frame from the normal heap before invoking the application
-callback. Jarvis TTS PCM/WAV responses can be several hundred KiB, while the
+callback. Ai-Voice-Satellite TTS PCM/WAV responses can be several hundred KiB, while the
 Waveshare has 8 MiB PSRAM. This build-time patch raises the frame limit and
 places large receive buffers in PSRAM.
 
-The repair section also fixes files modified by the first Jarvis version of
+The repair section also fixes files modified by the first Ai-Voice-Satellite version of
 this script, which accidentally wrote the two characters "\\n" instead of
 real newlines into the dependency source.
 """
@@ -21,10 +21,10 @@ pioenv = env.subst("$PIOENV")
 libdeps = Path(env.subst("$PROJECT_LIBDEPS_DIR")) / pioenv
 header = libdeps / "WebSockets" / "src" / "WebSockets.h"
 source = libdeps / "WebSockets" / "src" / "WebSockets.cpp"
-marker = "JARVIS_WEBSOCKETS_PSRAM_PATCH"
+marker = "AIVOICE-SATELLITE_WEBSOCKETS_PSRAM_PATCH"
 
 if not header.exists() or not source.exists():
-    raise RuntimeError(f"Jarvis WebSockets dependency not found under {libdeps}")
+    raise RuntimeError(f"Ai-Voice-Satellite WebSockets dependency not found under {libdeps}")
 
 # ---------------------------------------------------------------------------
 # WebSockets.h: raise the maximum inbound frame size.
@@ -32,11 +32,11 @@ if not header.exists() or not source.exists():
 h = header.read_text(encoding="utf-8")
 
 bad_header_block = (
-    f"// {marker}: Jarvis TTS can exceed the upstream 15 KiB receive limit.\\n"
+    f"// {marker}: Ai-Voice-Satellite TTS can exceed the upstream 15 KiB receive limit.\\n"
     "#define WEBSOCKETS_MAX_DATA_SIZE (2 * 1024 * 1024)"
 )
 good_header_block = (
-    f"// {marker}: Jarvis TTS can exceed the upstream 15 KiB receive limit.\n"
+    f"// {marker}: Ai-Voice-Satellite TTS can exceed the upstream 15 KiB receive limit.\n"
     "#define WEBSOCKETS_MAX_DATA_SIZE (2 * 1024 * 1024)"
 )
 
@@ -51,9 +51,9 @@ if marker not in h:
 
 # Validate that the define did not accidentally remain inside a // comment.
 if "\\n#define WEBSOCKETS_MAX_DATA_SIZE" in h:
-    raise RuntimeError("WebSockets.h still contains an escaped newline from an old Jarvis patch")
+    raise RuntimeError("WebSockets.h still contains an escaped newline from an old Ai-Voice-Satellite patch")
 if "#define WEBSOCKETS_MAX_DATA_SIZE (2 * 1024 * 1024)" not in h:
-    raise RuntimeError("Jarvis WebSockets receive-size define is missing after patch")
+    raise RuntimeError("Ai-Voice-Satellite WebSockets receive-size define is missing after patch")
 
 header.write_text(h, encoding="utf-8")
 
@@ -141,9 +141,9 @@ for escaped in (
 ):
     if escaped in c:
         raise RuntimeError(
-            "WebSockets.cpp still contains escaped newlines from an old Jarvis patch; "
+            "WebSockets.cpp still contains escaped newlines from an old Ai-Voice-Satellite patch; "
             "delete .pio/libdeps for this environment and rebuild"
         )
 
 source.write_text(c, encoding="utf-8")
-print(f"Jarvis WebSockets patch: large inbound frames use PSRAM ({pioenv})")
+print(f"Ai-Voice-Satellite WebSockets patch: large inbound frames use PSRAM ({pioenv})")

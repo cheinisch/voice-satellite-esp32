@@ -1,6 +1,6 @@
 #include "waveshare_185c_touch.h"
 #include "waveshare_185c_pins.h"
-#include "jarvis_config.h"
+#include "ai-voice-satellite_config.h"
 #include <algorithm>
 
 namespace {
@@ -32,13 +32,13 @@ bool Waveshare185CTouch::readBytes(uint8_t reg, uint8_t* data, size_t len) {
 }
 
 void Waveshare185CTouch::transform(uint16_t& x, uint16_t& y) const {
-#if JARVIS_WAVESHARE_TOUCH_SWAP_XY
+#if AIVOICE-SATELLITE_WAVESHARE_TOUCH_SWAP_XY
     std::swap(x, y);
 #endif
-#if JARVIS_WAVESHARE_TOUCH_INVERT_X
+#if AIVOICE-SATELLITE_WAVESHARE_TOUCH_INVERT_X
     x = x <= TOUCH_MAX ? TOUCH_MAX - x : 0;
 #endif
-#if JARVIS_WAVESHARE_TOUCH_INVERT_Y
+#if AIVOICE-SATELLITE_WAVESHARE_TOUCH_INVERT_Y
     y = y <= TOUCH_MAX ? TOUCH_MAX - y : 0;
 #endif
     if (x > TOUCH_MAX) x = TOUCH_MAX;
@@ -48,7 +48,7 @@ void Waveshare185CTouch::transform(uint16_t& x, uint16_t& y) const {
     // Hardware-specific swap/invert corrections above are applied first.
     const uint16_t rawX = x;
     const uint16_t rawY = y;
-    switch (static_cast<uint8_t>(JARVIS_DISPLAY_ROTATION_INDEX)) {
+    switch (static_cast<uint8_t>(AIVOICE-SATELLITE_DISPLAY_ROTATION_INDEX)) {
         case 1:
             x = TOUCH_MAX - rawY;
             y = rawX;

@@ -1,23 +1,23 @@
 # Changelog
 
-All notable changes to `jarvis-satellite-esp32` are documented in this file.
+All notable changes to `ai-voice-satellite-satellite-esp32` are documented in this file.
 
 ## 1.0.0 - 2026-08-30
 
-First stable release of the standalone ESP32 / ESP32-S3 Jarvis satellite firmware.
+First stable release of the standalone ESP32 / ESP32-S3 Ai-Voice-Satellite satellite firmware.
 
 ### Added
 
 #### Voice and audio
 
-- Added authenticated `jarvis.voice.v1` WebSocket communication with Bearer token support.
+- Added authenticated `ai-voice-satellite.voice.v1` WebSocket communication with Bearer token support.
 - Added microphone uplink using PCM16 / 16 kHz / mono WAV audio.
 - Added full STT → Assistant → TTS voice roundtrips.
-- Added `JARVIS_AUTO_TTS` for normal voice interactions.
+- Added `AIVOICE-SATELLITE_AUTO_TTS` for normal voice interactions.
 - Added binary PCM16 and PCM16-WAV TTS playback support.
 - Added WAV metadata parsing for sample rate, channel count, and 16-bit PCM.
 - Added sample-rate conversion to the internal 16 kHz playback format.
-- Added configurable TTS quality selection through `JARVIS_TTS_QUALITY`.
+- Added configurable TTS quality selection through `AIVOICE-SATELLITE_TTS_QUALITY`.
 - Supported local TTS quality values:
   - `low`
   - `medium`
@@ -48,7 +48,7 @@ First stable release of the standalone ESP32 / ESP32-S3 Jarvis satellite firmwar
 
 #### Display UI
 
-- Added a full Waveshare touch UI inspired by the Jarvis Command Center.
+- Added a full Waveshare touch UI inspired by the Ai-Voice-Satellite Command Center.
 - Added a large clock display.
 - Added U8g2 font support through Arduino_GFX.
 - Added UTF-8 capable UI text rendering.
@@ -73,13 +73,13 @@ First stable release of the standalone ESP32 / ESP32-S3 Jarvis satellite firmwar
   - gateway
   - DNS
   - RSSI
-  - Jarvis Core address
+  - Ai-Voice-Satellite Core address
 - Added RSSI quality indication.
 - Added speaker volume display.
 - Added runtime speaker volume control in 10% steps.
 - Added physical BOOT button handling to toggle the display backlight on/off.
 - Hardware RESET remains unchanged.
-- Added configurable display rotation through `JARVIS_DISPLAY_ROTATION`.
+- Added configurable display rotation through `AIVOICE-SATELLITE_DISPLAY_ROTATION`.
 - Supported rotations:
   - `0`
   - `1` / 90°
@@ -90,7 +90,7 @@ First stable release of the standalone ESP32 / ESP32-S3 Jarvis satellite firmwar
 
 #### Recording and voice activation
 
-- Added configurable maximum recording duration through `JARVIS_RECORD_MS`.
+- Added configurable maximum recording duration through `AIVOICE-SATELLITE_RECORD_MS`.
 - Added optional local silence detection.
 - Added configurable silence threshold.
 - Added configurable silence timeout.
@@ -137,7 +137,7 @@ First stable release of the standalone ESP32 / ESP32-S3 Jarvis satellite firmwar
 - Added ESP32-S3 N16R8 support.
 - Added XMOS XU316 SPI version probing.
 - Added Satellite1.1 48 kHz I2S audio path.
-- Added local conversion to Jarvis PCM16 / 16 kHz / mono.
+- Added local conversion to Ai-Voice-Satellite PCM16 / 16 kHz / mono.
 - Added direct action-button support.
 - TAS2780 / line-out, LED ring, and XMOS button handling remain experimental and require further validation on real hardware.
 
@@ -172,7 +172,7 @@ First stable release of the standalone ESP32 / ESP32-S3 Jarvis satellite firmwar
 
 ### Changed
 
-- Adapted the ESP32 Voice uplink to the production `jarvis.voice.v1` contract already used by the Linux / ReSpeaker satellites:
+- Adapted the ESP32 Voice uplink to the production `ai-voice-satellite.voice.v1` contract already used by the Linux / ReSpeaker satellites:
   - `session.start`
   - binary WAV message
   - `audio.commit`
@@ -193,7 +193,7 @@ First stable release of the standalone ESP32 / ESP32-S3 Jarvis satellite firmwar
 - Waveshare display updates use partial redraws where possible to reduce visible flicker.
 - The Waveshare microphone path is initialized before and independently from the speaker output.
 - ES8311 is initialized only when playback is required.
-- WakeNet and the normal Jarvis recording path share the microphone safely by pausing WakeNet before STT recording.
+- WakeNet and the normal Ai-Voice-Satellite recording path share the microphone safely by pausing WakeNet before STT recording.
 - The Generic, Waveshare, and Satellite1.1 PlatformIO environments are isolated from one another.
 
 ### Fixed
@@ -251,14 +251,14 @@ First stable release of the standalone ESP32 / ESP32-S3 Jarvis satellite firmwar
 
 ### Added
 
-- Created the standalone `jarvis-satellite-esp32` repository.
+- Created the standalone `ai-voice-satellite-satellite-esp32` repository.
 - Kept Linux satellite components completely separate.
 - Added a shared ESP32-S3 Voice Satellite core.
 - Added board abstraction through PlatformIO libraries under `boards/`.
 - Added a generic ESP32-S3 profile for external I2S microphone and speaker hardware.
 - Added the first display board profile for Waveshare ESP32-S3-Touch-LCD-1.85C **V2 / Rev2.0**.
 - Explicitly excluded Waveshare V1.
-- Added `jarvis.voice.v1` WebSocket protocol support.
+- Added `ai-voice-satellite.voice.v1` WebSocket protocol support.
 - Added PCM16 / 16 kHz / mono audio uplink to the Core.
 - Added binary PCM16 TTS downlink.
 - Added firmware version and build metadata to the client.

@@ -1,12 +1,12 @@
 #include "waveshare_185c_audio.h"
 #include "waveshare_185c_pins.h"
-#include "jarvis_config.h"
+#include "ai-voice-satellite_config.h"
 #include <ESP_I2S.h>
 #include <Wire.h>
 #include <AudioBoard.h>
 #include <algorithm>
 
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
 #include <ESP_SR.h>
 #endif
 
@@ -127,7 +127,7 @@ bool initEs7210Waveshare() {
     return true;
 }
 
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
 Waveshare185CAudio* wakeWordOwner = nullptr;
 
 void onWakeWordEvent(sr_event_t event, int commandId, int phraseId) {
@@ -157,12 +157,12 @@ struct Waveshare185CAudio::Impl {
     bool wakeWordStarted = false;
     bool wakeWordPaused = false;
     volatile bool wakeWordDetected = false;
-    uint8_t desiredVolume = static_cast<uint8_t>(std::clamp<int>(JARVIS_WAVESHARE_SPEAKER_VOLUME, 0, 100));
+    uint8_t desiredVolume = static_cast<uint8_t>(std::clamp<int>(AIVOICE-SATELLITE_WAVESHARE_SPEAKER_VOLUME, 0, 100));
 };
 
 Waveshare185CAudio::Waveshare185CAudio() : impl_(new Impl()) {}
 Waveshare185CAudio::~Waveshare185CAudio() {
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
     if (impl_ && impl_->wakeWordStarted) ESP_SR.end();
     if (wakeWordOwner == this) wakeWordOwner = nullptr;
 #endif
@@ -181,7 +181,7 @@ bool Waveshare185CAudio::startMicI2s() {
     i.i2s.setPins(waveshare185c::I2S_BCLK, waveshare185c::I2S_LRCK,
                   -1, waveshare185c::I2S_DIN, waveshare185c::I2S_MCLK);
     i.i2s.setTimeout(1000);
-    if (!i.i2s.begin(I2S_MODE_STD, JARVIS_AUDIO_RATE,
+    if (!i.i2s.begin(I2S_MODE_STD, AIVOICE-SATELLITE_AUDIO_RATE,
                      I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO)) {
         Serial.printf("Waveshare MIC I2S Initialisierung fehlgeschlagen: %d\n", i.i2s.lastError());
         i.micStarted = false;
@@ -197,7 +197,7 @@ bool Waveshare185CAudio::startMicI2s() {
     i.playbackMode = false;
     Serial.printf("Waveshare MIC I2S: Port=%d RX=ja TX=nein %u Hz/16-bit/stereo.\n",
                   static_cast<int>(i.i2s.getPort()),
-                  static_cast<unsigned>(JARVIS_AUDIO_RATE));
+                  static_cast<unsigned>(AIVOICE-SATELLITE_AUDIO_RATE));
     return true;
 }
 
@@ -248,12 +248,12 @@ bool Waveshare185CAudio::startSpeakerI2s() {
     }
 
     // Waveshare's playback reference uses a dedicated TX path with the
-    // left I2S slot. We use the Jarvis 16 kHz rate so no extra resampling
+    // left I2S slot. We use the Ai-Voice-Satellite 16 kHz rate so no extra resampling
     // is needed for TTS or the local speaker test.
     i.i2s.setPins(waveshare185c::I2S_BCLK, waveshare185c::I2S_LRCK,
                   waveshare185c::I2S_DOUT, -1, waveshare185c::I2S_MCLK);
     i.i2s.setTimeout(1000);
-    if (!i.i2s.begin(I2S_MODE_STD, JARVIS_AUDIO_RATE,
+    if (!i.i2s.begin(I2S_MODE_STD, AIVOICE-SATELLITE_AUDIO_RATE,
                      I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO,
                      I2S_STD_SLOT_LEFT)) {
         Serial.printf("Waveshare Speaker I2S Initialisierung fehlgeschlagen: %d\n", i.i2s.lastError());
@@ -300,13 +300,13 @@ bool Waveshare185CAudio::begin() {
                   static_cast<int>(i.i2s.getPort()),
                   i.i2s.rxChan() ? "ja" : "nein",
                   i.i2s.txChan() ? "ja" : "nein",
-                  static_cast<unsigned>(JARVIS_AUDIO_RATE));
+                  static_cast<unsigned>(AIVOICE-SATELLITE_AUDIO_RATE));
     Serial.println("ES8311/Lautsprecher wird erst bei der ersten TTS-Ausgabe initialisiert.");
     return true;
 }
 
 bool Waveshare185CAudio::beginWakeWord() {
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
     auto& i = *impl_;
     if (i.wakeWordStarted) return true;
     if (!i.micStarted && !restoreMicPath()) {
@@ -329,7 +329,7 @@ bool Waveshare185CAudio::beginWakeWord() {
 
     i.wakeWordStarted = true;
     i.wakeWordPaused = false;
-    Serial.printf("WakeNet aktiv: Wakeword '%s' (lokal auf ESP32-S3).\n", JARVIS_WAKEWORD_NAME);
+    Serial.printf("WakeNet aktiv: Wakeword '%s' (lokal auf ESP32-S3).\n", AIVOICE-SATELLITE_WAKEWORD_NAME);
     return true;
 #else
     return false;
@@ -337,7 +337,7 @@ bool Waveshare185CAudio::beginWakeWord() {
 }
 
 void Waveshare185CAudio::markWakeWordDetected() {
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
     if (!impl_ || !impl_->wakeWordStarted) return;
     if (impl_->wakeWordDetected) return;
     impl_->wakeWordDetected = true;
@@ -346,7 +346,7 @@ void Waveshare185CAudio::markWakeWordDetected() {
 }
 
 void Waveshare185CAudio::pauseWakeWord() {
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
     auto& i = *impl_;
     if (!i.wakeWordStarted || i.wakeWordPaused) return;
     if (ESP_SR.pause()) {
@@ -358,7 +358,7 @@ void Waveshare185CAudio::pauseWakeWord() {
 }
 
 void Waveshare185CAudio::resumeWakeWord() {
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
     auto& i = *impl_;
     if (!i.wakeWordStarted) return;
     i.wakeWordDetected = false;
@@ -374,7 +374,7 @@ void Waveshare185CAudio::resumeWakeWord() {
 }
 
 bool Waveshare185CAudio::consumeWakeWordTrigger() {
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
     if (!impl_ || !impl_->wakeWordDetected) return false;
     impl_->wakeWordDetected = false;
     return true;
@@ -384,7 +384,7 @@ bool Waveshare185CAudio::consumeWakeWordTrigger() {
 }
 
 bool Waveshare185CAudio::wakeWordActive() const {
-#if JARVIS_WAKEWORD_ENABLED
+#if AIVOICE-SATELLITE_WAKEWORD_ENABLED
     return impl_ && impl_->wakeWordStarted;
 #else
     return false;
@@ -392,7 +392,7 @@ bool Waveshare185CAudio::wakeWordActive() const {
 }
 
 const char* Waveshare185CAudio::wakeWordName() const {
-    return JARVIS_WAKEWORD_NAME;
+    return AIVOICE-SATELLITE_WAKEWORD_NAME;
 }
 
 bool Waveshare185CAudio::ensureSpeaker() {
@@ -542,7 +542,7 @@ bool Waveshare185CAudio::setVolume(uint8_t percent) {
 }
 
 uint8_t Waveshare185CAudio::volume() const {
-    return impl_ ? impl_->desiredVolume : static_cast<uint8_t>(JARVIS_WAVESHARE_SPEAKER_VOLUME);
+    return impl_ ? impl_->desiredVolume : static_cast<uint8_t>(AIVOICE-SATELLITE_WAVESHARE_SPEAKER_VOLUME);
 }
 
 void Waveshare185CAudio::clearOutput() {

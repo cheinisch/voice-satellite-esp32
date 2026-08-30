@@ -32,9 +32,9 @@ if build < 1:
 # Quotes are part of the compiler define value, so C++ receives a string literal.
 env.Append(
     CPPDEFINES=[
-        ("JARVIS_SATELLITE_VERSION", f'\\"{version}\\"'),
-        ("JARVIS_SATELLITE_BUILD", build),
+        ("AIVOICE-SATELLITE_SATELLITE_VERSION", f'\\"{version}\\"'),
+        ("AIVOICE-SATELLITE_SATELLITE_BUILD", build),
     ]
 )
 
-print(f"Jarvis firmware version: {version} Build {build}")
+print(f"Ai-Voice-Satellite firmware version: {version} Build {build}")

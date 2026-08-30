@@ -8,7 +8,7 @@ I2SClass sat1I2S(I2S_NUM_0);
 }
 
 bool Satellite11Audio::begin() {
-    // Satellite1.1 native audio path is 48 kHz, stereo, 32-bit. The Jarvis
+    // Satellite1.1 native audio path is 48 kHz, stereo, 32-bit. The Ai-Voice-Satellite
     // protocol remains 16 kHz PCM16 mono; conversion happens in this driver.
     sat1I2S.setPins(
         SAT1_I2S_BCLK_PIN,
@@ -40,7 +40,7 @@ size_t Satellite11Audio::readPcm16(int16_t* dst, size_t samples, uint32_t) {
     const size_t outCount = std::min(outWant, frames / kFramesPerOut);
 
     for (size_t i = 0; i < outCount; ++i) {
-        // Use the first XMOS channel for Jarvis voice uplink. XMOS performs the
+        // Use the first XMOS channel for Ai-Voice-Satellite voice uplink. XMOS performs the
         // microphone front-end processing before the I2S stream reaches ESP32.
         const int32_t sample32 = raw[(i * kFramesPerOut) * kChannels];
         int32_t sample16 = sample32 >> 16;

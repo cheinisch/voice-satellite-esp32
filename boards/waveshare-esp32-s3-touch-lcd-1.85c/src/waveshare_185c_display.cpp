@@ -1,6 +1,6 @@
 #include "waveshare_185c_display.h"
 #include "waveshare_185c_pins.h"
-#include "jarvis_config.h"
+#include "ai-voice-satellite_config.h"
 #include <WiFi.h>
 #include <U8g2lib.h>
 #include <Arduino_GFX_Library.h>
@@ -239,7 +239,7 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
         waveshare185c::LCD_D2, waveshare185c::LCD_D3,
         false);
 
-    const uint8_t rotation = static_cast<uint8_t>(JARVIS_DISPLAY_ROTATION_INDEX);
+    const uint8_t rotation = static_cast<uint8_t>(AIVOICE-SATELLITE_DISPLAY_ROTATION_INDEX);
     gfx_ = new Arduino_ST77916(
         bus_, -1, rotation, true, 360, 360, 0, 0, 0, 0,
         st77916_150_init_operations, sizeof(st77916_150_init_operations));
@@ -253,12 +253,12 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
     // Apply it once more explicitly so a future Arduino_GFX init-table change cannot
     // leave MADCTL at the panel default.
     gfx_->setRotation(rotation);
-#ifdef JARVIS_DISPLAY_ROTATION_INVALID
+#ifdef AIVOICE-SATELLITE_DISPLAY_ROTATION_INVALID
     Serial.printf("WARNUNG: Ungueltige Display-Rotation %d; verwende 0 Grad.\n",
-                  static_cast<int>(JARVIS_DISPLAY_ROTATION));
+                  static_cast<int>(AIVOICE-SATELLITE_DISPLAY_ROTATION));
 #endif
     Serial.printf("Display: Rotation config=%d -> index=%u (%u Grad).\n",
-                  static_cast<int>(JARVIS_DISPLAY_ROTATION), rotation,
+                  static_cast<int>(AIVOICE-SATELLITE_DISPLAY_ROTATION), rotation,
                   static_cast<unsigned>(rotation) * 90U);
 
     gfx_->setUTF8Print(true);
@@ -273,7 +273,7 @@ bool Waveshare185CDisplay::begin(Waveshare185CExpander& expander) {
     state_ = SatelliteState::Booting;
     detail_ = "";
     renderDashboard();
-    Serial.println("Display: Jarvis Command Center UI gerendert.");
+    Serial.println("Display: Ai-Voice-Satellite Command Center UI gerendert.");
     return true;
 }
 
@@ -306,7 +306,7 @@ void Waveshare185CDisplay::renderClock(bool force) {
     // enough air above the central status ring.
     gfx_->fillRect(0, 8, 360, 72, BG);
     centeredFont(String(buf), 20, TEXT, u8g2_font_logisoso38_tr);
-    centeredFont("JARVIS CORE", 65, MUTED_TXT, u8g2_font_helvR08_tf);
+    centeredFont("AIVOICE-SATELLITE CORE", 65, MUTED_TXT, u8g2_font_helvR08_tf);
 }
 
 // ---------------------------------------------------------------------------
@@ -348,7 +348,7 @@ void Waveshare185CDisplay::renderDotGrid(uint16_t accent) {
 
 void Waveshare185CDisplay::renderStatusLabels(uint16_t accent) {
     const int baseY = CY + R2 + 9;
-    centeredFont("JARVIS CORE", baseY, MUTED_TXT, u8g2_font_helvR08_tf);
+    centeredFont("AIVOICE-SATELLITE CORE", baseY, MUTED_TXT, u8g2_font_helvR08_tf);
     centeredFont(stateLabel(), baseY + 14, accent, u8g2_font_helvB10_tf);
     if (detail_.length()) {
         gfx_->fillRect(48, baseY + 30, 264, 14, BG);
@@ -468,7 +468,7 @@ void Waveshare185CDisplay::renderNetworkPopup() {
     const String gateway = connected ? WiFi.gatewayIP().toString() : String("-");
     const String dns = connected ? WiFi.dnsIP().toString() : String("-");
     const String rssi = connected ? String(WiFi.RSSI()) + " dBm" : String("-");
-    const String core = String(JARVIS_CORE_HOST) + ":" + String(JARVIS_CORE_PORT);
+    const String core = String(AIVOICE-SATELLITE_CORE_HOST) + ":" + String(AIVOICE-SATELLITE_CORE_PORT);
 
     const int labelX = POP_X + 18;
     const int valueX = POP_X + 78;
@@ -520,7 +520,7 @@ void Waveshare185CDisplay::setDisplayEnabled(bool enabled) {
         renderDashboard();
         Serial.println("Display: an.");
     } else {
-        Serial.println("Display: aus (Backlight). Jarvis bleibt aktiv.");
+        Serial.println("Display: aus (Backlight). Ai-Voice-Satellite bleibt aktiv.");
     }
 }
 
@@ -649,9 +649,9 @@ void Waveshare185CDisplay::showAssistant(const String& text) {
     gfx_->fillRoundRect(bx, by, bw, bh, 10, PANEL_2);
     gfx_->drawRoundRect(bx, by, bw, bh, 10, GOLD);
 
-    // Badge label "JARVIS"
+    // Badge label "AIVOICE-SATELLITE"
     gfx_->fillRect(bx + 10, by - 6, 52, 13, PANEL_2);
-    fontText("JARVIS", bx + 13, by - 4, GOLD, u8g2_font_helvB08_tf);
+    fontText("AIVOICE-SATELLITE", bx + 13, by - 4, GOLD, u8g2_font_helvB08_tf);
 
     const int textX = bx + 10;
     wrappedFontText(text, textX, by + 12, bw - 20, 3,
