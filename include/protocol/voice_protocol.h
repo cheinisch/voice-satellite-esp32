@@ -53,6 +53,7 @@ private:
     String displayName_ = "Voice Satellite";
     bool binaryFragmentActive_ = false;
     Board* board_ = nullptr;
+    bool mediaPlayPaused_ = false;  // lokaler Toggle-State für pause/resume
     BinaryHandler binaryHandler_;
     EventHandler eventHandler_;
     uint32_t ttsSampleRate_ = 16000;

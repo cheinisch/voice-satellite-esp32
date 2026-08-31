@@ -14,7 +14,7 @@ public:
     void showTranscript(const String& text);
     void showAssistant(const String& text);
 
-    // ---- existing touch hit-tests ----
+    // ── Standard touch hit-tests (active when NOT in media screen) ──────────
     bool hitCenterRecordButton(uint16_t x, uint16_t y) const;
     bool hitMicButton(uint16_t x, uint16_t y) const;
     bool hitNetworkButton(uint16_t x, uint16_t y) const;
@@ -22,14 +22,20 @@ public:
     bool hitVolumeDown(uint16_t x, uint16_t y) const;
     bool hitVolumeUp(uint16_t x, uint16_t y) const;
 
-    // ---- media overlay ----
-    // Call to show / update the media panel.  Passing active=false removes it.
+    // ── Media screen ─────────────────────────────────────────────────────────
+    // showMedia(info.active=true)  → switches to the dedicated media screen.
+    // showMedia(info.active=false) → returns to the voice dashboard.
     void showMedia(const MediaInfo& info);
-    // Touch hit-tests for the media controls (only valid when overlay active).
+
+    // Touch hit-tests — only meaningful while mediaScreenActive() is true.
     bool hitMediaPlayPause(uint16_t x, uint16_t y) const;
     bool hitMediaPrev(uint16_t x, uint16_t y) const;
     bool hitMediaNext(uint16_t x, uint16_t y) const;
-    bool mediaOverlayActive() const { return media_.active; }
+    bool hitMediaStop(uint16_t x, uint16_t y) const;
+    bool mediaScreenActive() const { return mediaScreen_; }
+
+    // Legacy alias kept so board.cpp compiles without changes.
+    bool mediaOverlayActive() const { return mediaScreen_; }
 
     void toggleNetworkPopup();
     bool networkPopupVisible() const { return networkPopupVisible_; }
@@ -48,12 +54,14 @@ private:
     String           displayName_ = "Voice Satellite";
     uint32_t         lastClockAt_ = 0;
     int              lastMinute_  = -1;
-    bool             displayOn_ = true;
-    bool             networkPopupVisible_ = false;
+    bool             displayOn_            = true;
+    bool             networkPopupVisible_  = false;
     bool             messageBubbleVisible_ = false;
-    uint8_t          volumePercent_ = 70;
+    bool             mediaScreen_          = false;   // true = media screen shown
+    uint8_t          volumePercent_        = 70;
     MediaInfo        media_;
 
+    // ── Dashboard rendering ──────────────────────────────────────────────────
     void renderDashboard();
     void renderCenterState(bool updateMic = false);
     void clearMessageArea();
@@ -65,10 +73,11 @@ private:
     void renderVolumeControls(bool partial = false);
     void renderNetworkPopup();
 
-    // Media overlay rendering helpers
-    void renderMediaOverlay();
-    void clearMediaOverlay();
+    // ── Media screen rendering ───────────────────────────────────────────────
+    void renderMediaScreen();
+    void renderMediaButtons();   // only redraws the three control circles
 
+    // ── Text helpers ─────────────────────────────────────────────────────────
     int  textWidth(const String& text, const uint8_t* font);
     void fontText(const String& text, int x, int topY, uint16_t color,
                   const uint8_t* font);

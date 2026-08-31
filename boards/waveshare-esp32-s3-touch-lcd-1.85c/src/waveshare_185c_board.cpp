@@ -54,51 +54,78 @@ void Waveshare185CBoard::loop() {
     if (display_.displayEnabled() && touch_.consumeTap(point)) {
         Serial.printf("Touch: x=%u y=%u\n", point.x, point.y);
 
-        if (display_.networkPopupVisible()) {
-            // Network popup captures all touches.
+        if (display_.mediaScreenActive()) {
+            // ── Media Screen — eigene Touch-Logik ───────────────────────────
+            // VOL– / VOL+ funktionieren auch hier (gleiche Geometrie).
+            // NET-Button und Voice-Controls sind gesperrt.
+            constexpr int MS_VOLDOWN_X = 96,  MS_VOLUP_X = 264;
+            constexpr int MS_VOL_Y     = 312, MS_VOL_HIT_R = 34;
+
+            const int dxD = static_cast<int>(point.x) - MS_VOLDOWN_X;
+            const int dyD = static_cast<int>(point.y) - MS_VOL_Y;
+            const int dxU = static_cast<int>(point.x) - MS_VOLUP_X;
+            const bool hitVolDown = dxD*dxD + dyD*dyD <= MS_VOL_HIT_R*MS_VOL_HIT_R;
+            const bool hitVolUp   = dxU*dxU + dyD*dyD <= MS_VOL_HIT_R*MS_VOL_HIT_R;
+
+            if (hitVolDown) {
+                if (lastVolumeActionAt_ == 0 || now - lastVolumeActionAt_ >= 300) {
+                    lastVolumeActionAt_ = now;
+                    const uint8_t current = audio_.volume();
+                    const uint8_t next = current <= 10 ? 0 : static_cast<uint8_t>(current - 10);
+                    if (audio_.setVolume(next)) display_.setVolumePercent(next);
+                }
+            } else if (hitVolUp) {
+                if (lastVolumeActionAt_ == 0 || now - lastVolumeActionAt_ >= 300) {
+                    lastVolumeActionAt_ = now;
+                    const uint8_t current = audio_.volume();
+                    const uint8_t next = current >= 90 ? 100 : static_cast<uint8_t>(current + 10);
+                    if (audio_.setVolume(next)) display_.setVolumePercent(next);
+                }
+            } else if (display_.hitMediaPlayPause(point.x, point.y)) {
+                mediaPlayPause_ = true;
+                Serial.println("Media: Play/Pause");
+            } else if (display_.hitMediaPrev(point.x, point.y)) {
+                mediaPrev_ = true;
+                Serial.println("Media: Prev");
+            } else if (display_.hitMediaNext(point.x, point.y)) {
+                mediaNext_ = true;
+                Serial.println("Media: Next");
+            } else if (display_.hitMediaStop(point.x, point.y)) {
+                mediaStop_ = true;
+                Serial.println("Media: Stop");
+            }
+
+        } else if (display_.networkPopupVisible()) {
+            // ── Network-Popup fängt alle Touches ab ─────────────────────────
             if (display_.hitNetworkCloseButton(point.x, point.y) ||
                 display_.hitNetworkButton(point.x, point.y)) {
                 display_.toggleNetworkPopup();
             }
-        } else if (display_.hitNetworkButton(point.x, point.y)) {
-            display_.toggleNetworkPopup();
 
-        } else if (display_.hitVolumeDown(point.x, point.y)) {
-            if (lastVolumeActionAt_ == 0 || now - lastVolumeActionAt_ >= 300) {
-                lastVolumeActionAt_ = now;
-                const uint8_t current = audio_.volume();
-                const uint8_t next = current <= 10 ? 0 : static_cast<uint8_t>(current - 10);
-                if (audio_.setVolume(next)) display_.setVolumePercent(next);
+        } else {
+            // ── Standard Voice-Dashboard ─────────────────────────────────────
+            if (display_.hitNetworkButton(point.x, point.y)) {
+                display_.toggleNetworkPopup();
+
+            } else if (display_.hitVolumeDown(point.x, point.y)) {
+                if (lastVolumeActionAt_ == 0 || now - lastVolumeActionAt_ >= 300) {
+                    lastVolumeActionAt_ = now;
+                    const uint8_t current = audio_.volume();
+                    const uint8_t next = current <= 10 ? 0 : static_cast<uint8_t>(current - 10);
+                    if (audio_.setVolume(next)) display_.setVolumePercent(next);
+                }
+            } else if (display_.hitVolumeUp(point.x, point.y)) {
+                if (lastVolumeActionAt_ == 0 || now - lastVolumeActionAt_ >= 300) {
+                    lastVolumeActionAt_ = now;
+                    const uint8_t current = audio_.volume();
+                    const uint8_t next = current >= 90 ? 100 : static_cast<uint8_t>(current + 10);
+                    if (audio_.setVolume(next)) display_.setVolumePercent(next);
+                }
+            } else if (display_.hitMicButton(point.x, point.y)) {
+                muteToggle_ = true;
+            } else if (display_.hitCenterRecordButton(point.x, point.y)) {
+                trigger_ = true;
             }
-        } else if (display_.hitVolumeUp(point.x, point.y)) {
-            if (lastVolumeActionAt_ == 0 || now - lastVolumeActionAt_ >= 300) {
-                lastVolumeActionAt_ = now;
-                const uint8_t current = audio_.volume();
-                const uint8_t next = current >= 90 ? 100 : static_cast<uint8_t>(current + 10);
-                if (audio_.setVolume(next)) display_.setVolumePercent(next);
-            }
-
-        // ── Media controls — only dispatched when overlay is visible ────────
-        } else if (display_.mediaOverlayActive() &&
-                   display_.hitMediaPlayPause(point.x, point.y)) {
-            mediaPlayPause_ = true;
-            Serial.println("Media: Play/Pause");
-
-        } else if (display_.mediaOverlayActive() &&
-                   display_.hitMediaPrev(point.x, point.y)) {
-            mediaPrev_ = true;
-            Serial.println("Media: Prev");
-
-        } else if (display_.mediaOverlayActive() &&
-                   display_.hitMediaNext(point.x, point.y)) {
-            mediaNext_ = true;
-            Serial.println("Media: Next");
-
-        // ── Standard voice controls ─────────────────────────────────────────
-        } else if (display_.hitMicButton(point.x, point.y)) {
-            muteToggle_ = true;
-        } else if (display_.hitCenterRecordButton(point.x, point.y)) {
-            trigger_ = true;
         }
     }
 
@@ -132,6 +159,9 @@ bool Waveshare185CBoard::consumeMediaPrev() {
 }
 bool Waveshare185CBoard::consumeMediaNext() {
     const bool v = mediaNext_; mediaNext_ = false; return v;
+}
+bool Waveshare185CBoard::consumeMediaStop() {
+    const bool v = mediaStop_; mediaStop_ = false; return v;
 }
 
 void Waveshare185CBoard::setDisplayName(const String& name) {

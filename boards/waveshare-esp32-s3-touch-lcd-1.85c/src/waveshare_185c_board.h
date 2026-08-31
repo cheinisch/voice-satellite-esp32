@@ -28,6 +28,7 @@ public:
     bool consumeMediaPrev();
     // Returns true if the next-track button was tapped.
     bool consumeMediaNext();
+    bool consumeMediaStop();
 
 private:
     Waveshare185CExpander expander_;
@@ -45,4 +46,5 @@ private:
     bool     mediaPlayPause_ = false;
     bool     mediaPrev_      = false;
     bool     mediaNext_      = false;
+    bool     mediaStop_      = false;
 };

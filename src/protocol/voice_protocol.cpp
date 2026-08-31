@@ -73,27 +73,23 @@ void VoiceProtocol::loop() {
         // Poll media touch controls from the board and send commands to Core.
         if (board_) {
             auto* wb = static_cast<Waveshare185CBoard*>(board_);
-            if (wb->consumeMediaPlayPause()) {
+
+            // Core erwartet {"type":"media.control","action":"<action>"}.
+            // "toggle" wird vom Core selbst zu pause/resume aufgelöst.
+            auto sendMediaControl = [&](const char* action, int step = 0) {
                 JsonDocument cmd;
-                cmd["type"] = "media.toggle";
+                cmd["type"]   = "media.control";
+                cmd["action"] = action;
+                if (step > 0) cmd["step"] = step;
                 String out; serializeJson(cmd, out);
                 sendJson(out);
-                Serial.println("[media] Touch: play/pause -> Core");
-            }
-            if (wb->consumeMediaPrev()) {
-                JsonDocument cmd;
-                cmd["type"] = "media.previous";
-                String out; serializeJson(cmd, out);
-                sendJson(out);
-                Serial.println("[media] Touch: prev -> Core");
-            }
-            if (wb->consumeMediaNext()) {
-                JsonDocument cmd;
-                cmd["type"] = "media.next";
-                String out; serializeJson(cmd, out);
-                sendJson(out);
-                Serial.println("[media] Touch: next -> Core");
-            }
+                Serial.printf("[media] Touch: media.control action=%s -> Core\n", action);
+            };
+
+            if (wb->consumeMediaPlayPause()) sendMediaControl("toggle");
+            if (wb->consumeMediaPrev())      sendMediaControl("volume_down", 10);  // kein prev → VOL–
+            if (wb->consumeMediaNext())      sendMediaControl("volume_up",   10);  // kein next → VOL+
+            if (wb->consumeMediaStop())      sendMediaControl("stop");
         }
     }
 }
@@ -233,6 +229,15 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         if (mediaResponse.length()) {
             sendJson(mediaResponse);
         }
+        // Lokalen Pause-Toggle-State mit dem echten Core-State synchronisieren.
+        const char* mtype = doc["type"] | "";
+        if (!strcmp(mtype, "media.start") || !strcmp(mtype, "media.resume")) {
+            mediaPlayPaused_ = false;  // läuft → nächster Touch = pause
+        } else if (!strcmp(mtype, "media.pause")) {
+            mediaPlayPaused_ = true;   // pausiert → nächster Touch = resume
+        } else if (!strcmp(mtype, "media.stop")) {
+            mediaPlayPaused_ = false;
+        }
         return;
     }
 
@@ -314,6 +319,8 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
                           static_cast<unsigned long>(ttsExpectedChunks_),
                           ttsAckRequired_ ? "ja" : "nein");
         }
+        // Musik pausieren damit TTS den I2S-Bus bekommt.
+        jarvisMediaInterruptForVoice();
         emit(VoiceEvent::TtsStart);
         return;
     }
@@ -322,6 +329,13 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         !strcmp(type, "audio_output_end") || !strcmp(type, "audio.output.end") ||
         !strcmp(type, "response.audio.done")) {
         Serial.println("TTS beendet.");
+        // Media-Layer informieren damit Musik ggf. wieder startet.
+        {
+            JsonDocument fwd;
+            fwd["type"] = type;
+            String unused;
+            jarvisMediaHandleMessage(fwd, unused);
+        }
         emit(VoiceEvent::TtsEnd);
         return;
     }
@@ -339,6 +353,12 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         return;
     }
 
+    // media.* Messages die nicht von jarvisMediaHandleMessage abgefangen wurden
+    // (z.B. Core-Fehlerantworten auf unbekannte Commands) still ignorieren.
+    if (strncmp(type, "media.", 6) == 0) {
+        Serial.printf("[media] Unbekannter Typ ignoriert: %s\n", type);
+        return;
+    }
     Serial.printf("Core Event: %s\n", text.c_str());
 }
 

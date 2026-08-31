@@ -385,7 +385,6 @@ void Waveshare185CDisplay::clearMessageArea() {
     // Clear only that area instead of rebuilding the whole dashboard.
     gfx_->fillRect(126, 282, 108, 68, BG);
     messageBubbleVisible_ = false;
-    if (media_.active) renderMediaOverlay();
 }
 
 void Waveshare185CDisplay::renderCenterState(bool updateMic) {
@@ -532,7 +531,15 @@ void Waveshare185CDisplay::toggleNetworkPopup() {
 
 void Waveshare185CDisplay::setVolumePercent(uint8_t percent) {
     volumePercent_ = percent > 100 ? 100 : percent;
-    if (ready_ && displayOn_) renderVolumeControls(true);
+    if (!ready_ || !displayOn_) return;
+    if (mediaScreen_) {
+        // Nur die Prozentzahl in der Mitte unten aktualisieren.
+        constexpr int MS_VOL_Y = 312;
+        gfx_->fillRect(120, MS_VOL_Y - 16, 120, 16, BG);
+        centeredFont(String(volumePercent_) + "%", MS_VOL_Y - 8, MUTED_TXT, u8g2_font_helvR10_tf);
+    } else {
+        renderVolumeControls(true);
+    }
 }
 
 void Waveshare185CDisplay::setDisplayName(const String& name) {
@@ -594,11 +601,12 @@ void Waveshare185CDisplay::renderDashboard() {
     renderVolumeControls();
     renderNetworkButton();
     if (networkPopupVisible_) renderNetworkPopup();
-    if (media_.active) renderMediaOverlay();
 }
 
 void Waveshare185CDisplay::showState(SatelliteState state, const String& detail) {
     if (!ready_) return;
+    // Media-Screen hat Priorität — Dashboard-State-Updates ignorieren.
+    if (mediaScreen_) { state_ = state; detail_ = detail; return; }
 
     const SatelliteState previous = state_;
     const bool muteChanged =
@@ -622,7 +630,6 @@ void Waveshare185CDisplay::showState(SatelliteState state, const String& detail)
     }
 
     renderCenterState(muteChanged);
-    if (media_.active && !networkPopupVisible_) renderMediaOverlay();
 }
 
 // ---------------------------------------------------------------------------
@@ -747,145 +754,227 @@ bool Waveshare185CDisplay::hitVolumeUp(uint16_t x, uint16_t y) const {
     return dx * dx + dy * dy <= VOL_HIT_R * VOL_HIT_R;
 }
 
-// ---------------------------------------------------------------------------
-// Media overlay
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Media Screen — vollständiger Ersatz-Screen während der Wiedergabe
 //
-//  Layout on the 360x360 round display (bottom third, below the voice ring):
+//  360×360 runder Screen-Layout:
 //
-//   y=240  ┌──────────────────────────────────┐
-//          │ ♪  <Title bold>                  │
-//          │    <Artist muted>                │
-//          │  ─────────────────────────────   │
-//   y=302  │   [⏮]        [⏸/▶]      [⏭]   │
-//   y=332  └──────────────────────────────────┘
+//   ┌──────────────────────────────────────────┐
+//   │           ♪  JETZT LÄUFT                │  y=30  Header
+//   │  ─────────────────────────────────────  │  y=52
+//   │                                          │
+//   │        [großes Musiknoten-Icon]          │  y=80–160  Album-Art-Platzhalter
+//   │                                          │
+//   │      Bohemian Rhapsody                   │  y=185  Titel (bold, groß)
+//   │           Queen                          │  y=205  Interpret (muted)
+//   │                                          │
+//   │  ──────────────────────────────────────  │  y=228
+//   │                                          │
+//   │      [⏮]          [⏸/▶]       [⏭]      │  y=268  Buttons
+//   │                                          │
+//   │  [VOL–]                       [VOL+]     │  y=320  Lautstärke
+//   └──────────────────────────────────────────┘
 //
-//  The voice-ring centre is at y≈183 — no overlap with this panel.
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 namespace {
-constexpr int MEDIA_PANEL_Y  = 220;
-constexpr int MEDIA_PANEL_H  = 92;
-constexpr int MEDIA_PANEL_X  = 54;
-constexpr int MEDIA_PANEL_W  = 252;
-
-constexpr int MEDIA_BTN_Y    = 282;
-constexpr int MEDIA_PLAY_X   = 180;
-constexpr int MEDIA_PREV_X   = 108;
-constexpr int MEDIA_NEXT_X   = 252;
-constexpr int MEDIA_BTN_R    = 20;
-constexpr int MEDIA_BTN_HIT  = 32;
-
-constexpr int MEDIA_TITLE_Y  = 235;
-constexpr int MEDIA_ARTIST_Y = 249;
+// Geometry — Media Screen (berechnet für 360x360 RUNDES Display, Radius=180)
+// Alle Positionen geprüft: kein Element liegt außerhalb des sichtbaren Kreises.
+constexpr int MS_BTN_Y       = 270;   // Buttons: chord-width ≈ 286px → Prev/Next passen
+constexpr int MS_PLAY_X      = 180;
+constexpr int MS_PREV_X      = 116;   // 116-26=90 > 33 ✓
+constexpr int MS_NEXT_X      = 244;   // 244+26=270 < 327 ✓
+constexpr int MS_BTN_R       = 26;
+constexpr int MS_BTN_HIT     = 38;
+constexpr int MS_TITLE_Y     = 188;
+constexpr int MS_ARTIST_Y    = 207;
+constexpr int MS_VOL_Y       = 312;   // chord-width ≈ 228px → VOL@96/264±18 passen ✓
+constexpr int MS_VOLDOWN_X   = 96;
+constexpr int MS_VOLUP_X     = 264;
+constexpr int MS_VOL_HIT_R   = 34;
+constexpr int MS_STOP_X      = 180;  // Stop: mittig y=305, chord~238px OK
+constexpr int MS_STOP_Y      = 305;
+constexpr int MS_STOP_R      = 18;
+constexpr int MS_STOP_HIT    = 30;
 } // namespace
 
-void Waveshare185CDisplay::showMedia(const MediaInfo& info) {
-    const bool wasActive = media_.active;
-    media_ = info;
-
-    if (!ready_ || !displayOn_ || networkPopupVisible_) return;
-
-    if (!info.active) {
-        if (wasActive) clearMediaOverlay();
-        return;
-    }
-    renderMediaOverlay();
-}
-
-void Waveshare185CDisplay::renderMediaOverlay() {
+// ---------------------------------------------------------------------------
+// renderMediaScreen — kompletter Vollbild-Render
+// ---------------------------------------------------------------------------
+void Waveshare185CDisplay::renderMediaScreen() {
     if (!ready_ || !displayOn_) return;
 
-    // ── Panel background ────────────────────────────────────────────────────
-    gfx_->fillRoundRect(MEDIA_PANEL_X, MEDIA_PANEL_Y,
-                        MEDIA_PANEL_W, MEDIA_PANEL_H, 12, PANEL_2);
-    gfx_->drawRoundRect(MEDIA_PANEL_X, MEDIA_PANEL_Y,
-                        MEDIA_PANEL_W, MEDIA_PANEL_H, 12, BORDER);
+    gfx_->fillScreen(BG);
 
-    // ── Music note icon (top-left corner of panel) ──────────────────────────
+    // ── Corner brackets (wie Dashboard) ─────────────────────────────────────
+    gfx_->drawLine( 44,  6,  84,  6, BORDER); gfx_->drawLine( 44,  6,  44, 18, BORDER);
+    gfx_->drawLine(276,  6, 316,  6, BORDER); gfx_->drawLine(316,  6, 316, 18, BORDER);
+    gfx_->drawLine( 44, 354,  44, 342, BORDER); gfx_->drawLine( 44, 354,  84, 354, BORDER);
+    gfx_->drawLine(316, 354, 316, 342, BORDER); gfx_->drawLine(316, 354, 276, 354, BORDER);
+
+    // ── Header — bei y=36, sichtbarer Bereich x=80..280 ────────────────────
+    centeredFont("JETZT LAUFT", 36, CYAN, u8g2_font_helvB10_tf);
+    // Trennlinie: bei y=56 Chord-Breite ≈ 232px → x=64..296
+    gfx_->drawLine(68, 56, 292, 56, BORDER);
+
+    // ── Vinyl-Scheibe als Album-Art-Platzhalter ───────────────────────────────
+    // Mittelpunkt y=118, Radius 52 → bei y=118: chord≥314px, passt komplett ✓
+    gfx_->drawCircle(180, 118, 52, BORDER);
+    gfx_->drawCircle(180, 118, 51, BORDER);
+    gfx_->fillCircle(180, 118, 38, PANEL_2);
+    for (int r = 20; r <= 34; r += 7)
+        gfx_->drawCircle(180, 118, r, rgb565(18, 42, 60));
+    gfx_->fillCircle(180, 118,  8, BORDER);
+    gfx_->fillCircle(180, 118,  4, CYAN);
+
+    // ── Titel und Interpret ──────────────────────────────────────────────────
+    // y=188: chord-Breite ≈ 330px, nutzbar x=25..335 → textLeft=36, maxW=288
+    const String title  = media_.title.length()  ? media_.title  : "Unbekannter Titel";
+    const String artist = media_.artist.length() ? media_.artist : "Unbekannter Interpret";
+
+    gfx_->fillRect(0, MS_TITLE_Y - 2, 360, 40, BG);
+    wrappedFontText(title, 36, MS_TITLE_Y, 288, 2, TEXT, u8g2_font_helvB12_tf, 16);
+    centeredFont(compact(artist, 30), MS_ARTIST_Y + 16, MUTED_TXT, u8g2_font_helvR10_tf);
+
+    // ── Trennlinie vor Buttons ────────────────────────────────────────────────
+    // y=238: chord≈306px → x=27..333
+    gfx_->drawLine(34, 238, 326, 238, BORDER);
+
+    // ── Steuerbuttons (y=270) ────────────────────────────────────────────────
+    renderMediaButtons();
+
+    // ── Lautstärke (y=312): chord≈228px → x=96..264 ✓ ───────────────────────
+        // Stop-Button (y=305, x=180)
+    gfx_->fillCircle(MS_STOP_X, MS_STOP_Y, MS_STOP_R, PANEL_2);
+    gfx_->drawCircle(MS_STOP_X, MS_STOP_Y, MS_STOP_R, RED);
+    gfx_->fillRect(MS_STOP_X - 6, MS_STOP_Y - 6, 12, 12, RED);
+
+    gfx_->fillCircle(MS_VOLDOWN_X, MS_VOL_Y, 18, PANEL_2);
+    gfx_->drawCircle(MS_VOLDOWN_X, MS_VOL_Y, 18, BORDER);
+    gfx_->drawLine(MS_VOLDOWN_X - 7, MS_VOL_Y, MS_VOLDOWN_X + 7, MS_VOL_Y, TEXT);
+
+    gfx_->fillCircle(MS_VOLUP_X, MS_VOL_Y, 18, PANEL_2);
+    gfx_->drawCircle(MS_VOLUP_X, MS_VOL_Y, 18, BORDER);
+    gfx_->drawLine(MS_VOLUP_X - 7, MS_VOL_Y, MS_VOLUP_X + 7, MS_VOL_Y, TEXT);
+    gfx_->drawLine(MS_VOLUP_X, MS_VOL_Y - 7, MS_VOLUP_X, MS_VOL_Y + 7, TEXT);
+
+    const String vol = String(volumePercent_) + "%";
+    centeredFont(vol, MS_VOL_Y - 8, MUTED_TXT, u8g2_font_helvR10_tf);
+}
+
+// ---------------------------------------------------------------------------
+// renderMediaButtons — nur die drei Steuerkreise neu zeichnen (nach State-Wechsel)
+// ---------------------------------------------------------------------------
+void Waveshare185CDisplay::renderMediaButtons() {
+    if (!ready_ || !displayOn_) return;
+
     const uint16_t accent = CYAN;
-    const int noteX = MEDIA_PANEL_X + 10;
-    const int noteY = MEDIA_TITLE_Y + 2;
-    gfx_->drawLine(noteX + 8, noteY - 6, noteX + 8, noteY + 6, accent); // stem
-    gfx_->drawLine(noteX + 8, noteY - 6, noteX + 13, noteY - 3, accent); // flag
-    gfx_->fillCircle(noteX + 5, noteY + 7, 4, accent);                   // head
-
-    // ── Title and artist text ───────────────────────────────────────────────
-    const int textLeft = MEDIA_PANEL_X + 24;
-
-    const String title  = compact(
-        media_.title.length()  ? media_.title  : "Unbekannter Titel",    28);
-    const String artist = compact(
-        media_.artist.length() ? media_.artist : "Unbekannter Interpret", 28);
-
-    fontText(title,  textLeft, MEDIA_TITLE_Y,  TEXT,      u8g2_font_helvB10_tf);
-    fontText(artist, textLeft, MEDIA_ARTIST_Y, MUTED_TXT, u8g2_font_helvR10_tf);
-
-    // ── Separator ───────────────────────────────────────────────────────────
-    gfx_->drawLine(MEDIA_PANEL_X + 12, MEDIA_PANEL_Y + 38,
-                   MEDIA_PANEL_X + MEDIA_PANEL_W - 12, MEDIA_PANEL_Y + 38,
-                   BORDER);
 
     // ── Prev ⏮ ──────────────────────────────────────────────────────────────
-    gfx_->fillCircle(MEDIA_PREV_X, MEDIA_BTN_Y, MEDIA_BTN_R, PANEL_2);
-    gfx_->drawCircle(MEDIA_PREV_X, MEDIA_BTN_Y, MEDIA_BTN_R, BORDER);
-    // Two left-pointing triangles (◀◀)
+    gfx_->fillCircle(MS_PREV_X, MS_BTN_Y, MS_BTN_R, PANEL_2);
+    gfx_->drawCircle(MS_PREV_X, MS_BTN_Y, MS_BTN_R, BORDER);
     for (int t = 0; t < 2; t++) {
-        const int ax = MEDIA_PREV_X + 5 - t * 7;
-        gfx_->drawLine(ax,     MEDIA_BTN_Y - 6, ax - 6, MEDIA_BTN_Y,     MUTED_TXT);
-        gfx_->drawLine(ax - 6, MEDIA_BTN_Y,     ax,     MEDIA_BTN_Y + 6, MUTED_TXT);
-        gfx_->drawLine(ax,     MEDIA_BTN_Y - 6, ax,     MEDIA_BTN_Y + 6, MUTED_TXT);
+        const int ax = MS_PREV_X + 6 - t * 8;
+        gfx_->drawLine(ax,     MS_BTN_Y - 8, ax - 8, MS_BTN_Y,     MUTED_TXT);
+        gfx_->drawLine(ax - 8, MS_BTN_Y,     ax,     MS_BTN_Y + 8, MUTED_TXT);
+        gfx_->drawLine(ax,     MS_BTN_Y - 8, ax,     MS_BTN_Y + 8, MUTED_TXT);
     }
 
-    // ── Play / Pause ⏸/▶ ────────────────────────────────────────────────────
-    gfx_->fillCircle(MEDIA_PLAY_X, MEDIA_BTN_Y, MEDIA_BTN_R, PANEL_2);
-    gfx_->drawCircle(MEDIA_PLAY_X, MEDIA_BTN_Y, MEDIA_BTN_R, accent);
+    // ── Play/Pause ⏸/▶ (größer, Cyan-Ring) ──────────────────────────────────
+    gfx_->fillCircle(MS_PLAY_X, MS_BTN_Y, MS_BTN_R, PANEL_2);
+    gfx_->drawCircle(MS_PLAY_X, MS_BTN_Y, MS_BTN_R,     accent);
+    gfx_->drawCircle(MS_PLAY_X, MS_BTN_Y, MS_BTN_R - 1, accent);
     if (media_.playing) {
-        // Pause — two vertical bars
-        gfx_->fillRect(MEDIA_PLAY_X - 6, MEDIA_BTN_Y - 6, 4, 12, accent);
-        gfx_->fillRect(MEDIA_PLAY_X + 2, MEDIA_BTN_Y - 6, 4, 12, accent);
+        gfx_->fillRect(MS_PLAY_X - 7, MS_BTN_Y - 8, 5, 16, accent);
+        gfx_->fillRect(MS_PLAY_X + 2, MS_BTN_Y - 8, 5, 16, accent);
     } else {
-        // Play — filled right-pointing triangle
-        for (int i = 0; i < 8; i++) {
-            gfx_->drawLine(MEDIA_PLAY_X - 4 + i, MEDIA_BTN_Y - (7 - i),
-                           MEDIA_PLAY_X - 4 + i, MEDIA_BTN_Y + (7 - i), accent);
+        for (int i = 0; i < 10; i++) {
+            gfx_->drawLine(MS_PLAY_X - 5 + i, MS_BTN_Y - (9 - i),
+                           MS_PLAY_X - 5 + i, MS_BTN_Y + (9 - i), accent);
         }
     }
 
     // ── Next ⏭ ──────────────────────────────────────────────────────────────
-    gfx_->fillCircle(MEDIA_NEXT_X, MEDIA_BTN_Y, MEDIA_BTN_R, PANEL_2);
-    gfx_->drawCircle(MEDIA_NEXT_X, MEDIA_BTN_Y, MEDIA_BTN_R, BORDER);
-    // Two right-pointing triangles (▶▶)
+    gfx_->fillCircle(MS_NEXT_X, MS_BTN_Y, MS_BTN_R, PANEL_2);
+    gfx_->drawCircle(MS_NEXT_X, MS_BTN_Y, MS_BTN_R, BORDER);
     for (int t = 0; t < 2; t++) {
-        const int ax = MEDIA_NEXT_X - 5 + t * 7;
-        gfx_->drawLine(ax,     MEDIA_BTN_Y - 6, ax + 6, MEDIA_BTN_Y,     MUTED_TXT);
-        gfx_->drawLine(ax + 6, MEDIA_BTN_Y,     ax,     MEDIA_BTN_Y + 6, MUTED_TXT);
-        gfx_->drawLine(ax,     MEDIA_BTN_Y - 6, ax,     MEDIA_BTN_Y + 6, MUTED_TXT);
+        const int ax = MS_NEXT_X - 6 + t * 8;
+        gfx_->drawLine(ax,     MS_BTN_Y - 8, ax + 8, MS_BTN_Y,     MUTED_TXT);
+        gfx_->drawLine(ax + 8, MS_BTN_Y,     ax,     MS_BTN_Y + 8, MUTED_TXT);
+        gfx_->drawLine(ax,     MS_BTN_Y - 8, ax,     MS_BTN_Y + 8, MUTED_TXT);
     }
 }
 
-void Waveshare185CDisplay::clearMediaOverlay() {
+// ---------------------------------------------------------------------------
+// showMedia — öffentliche API
+// ---------------------------------------------------------------------------
+void Waveshare185CDisplay::showMedia(const MediaInfo& info) {
+    const bool wasActive = media_.active;
+    const bool playStateChanged = (media_.playing != info.playing);
+    media_ = info;
+
     if (!ready_ || !displayOn_) return;
-    gfx_->fillRect(0, MEDIA_PANEL_Y, 360, MEDIA_PANEL_H + 8, BG);
+
+    if (!info.active) {
+        if (wasActive) {
+            // Wiedergabe beendet → zurück zum Dashboard
+            mediaScreen_ = false;
+            networkPopupVisible_ = false;
+            renderDashboard();
+            Serial.println("[media] Screen beendet, Dashboard wiederhergestellt.");
+        }
+        return;
+    }
+
+    // Neuer Track oder erste Aktivierung → kompletter Screen-Render
+    if (!wasActive || !mediaScreen_) {
+        mediaScreen_ = true;
+        networkPopupVisible_ = false;  // Popup schließen falls offen
+        renderMediaScreen();
+        Serial.printf("[media] Screen: %s – %s\n",
+                      media_.title.c_str(), media_.artist.c_str());
+        return;
+    }
+
+    // Nur Play/Pause-State geändert → nur Buttons neu zeichnen
+    if (playStateChanged) {
+        gfx_->fillRect(MS_PLAY_X - MS_BTN_R - 2, MS_BTN_Y - MS_BTN_R - 2,
+                       MS_BTN_R * 2 + 4, MS_BTN_R * 2 + 4, BG);
+        renderMediaButtons();
+        return;
+    }
+
+    // Titel/Interpret geändert (neuer Track) → ganzen Screen neu
+    renderMediaScreen();
 }
 
+// ---------------------------------------------------------------------------
+// Touch hit-tests — Media Screen
+// ---------------------------------------------------------------------------
 bool Waveshare185CDisplay::hitMediaPlayPause(uint16_t x, uint16_t y) const {
-    if (!media_.active) return false;
-    const int dx = static_cast<int>(x) - MEDIA_PLAY_X;
-    const int dy = static_cast<int>(y) - MEDIA_BTN_Y;
-    return dx * dx + dy * dy <= MEDIA_BTN_HIT * MEDIA_BTN_HIT;
+    if (!mediaScreen_) return false;
+    const int dx = static_cast<int>(x) - MS_PLAY_X;
+    const int dy = static_cast<int>(y) - MS_BTN_Y;
+    return dx * dx + dy * dy <= MS_BTN_HIT * MS_BTN_HIT;
 }
 
 bool Waveshare185CDisplay::hitMediaPrev(uint16_t x, uint16_t y) const {
-    if (!media_.active) return false;
-    const int dx = static_cast<int>(x) - MEDIA_PREV_X;
-    const int dy = static_cast<int>(y) - MEDIA_BTN_Y;
-    return dx * dx + dy * dy <= MEDIA_BTN_HIT * MEDIA_BTN_HIT;
+    if (!mediaScreen_) return false;
+    const int dx = static_cast<int>(x) - MS_PREV_X;
+    const int dy = static_cast<int>(y) - MS_BTN_Y;
+    return dx * dx + dy * dy <= MS_BTN_HIT * MS_BTN_HIT;
 }
 
 bool Waveshare185CDisplay::hitMediaNext(uint16_t x, uint16_t y) const {
-    if (!media_.active) return false;
-    const int dx = static_cast<int>(x) - MEDIA_NEXT_X;
-    const int dy = static_cast<int>(y) - MEDIA_BTN_Y;
-    return dx * dx + dy * dy <= MEDIA_BTN_HIT * MEDIA_BTN_HIT;
+    if (!mediaScreen_) return false;
+    const int dx = static_cast<int>(x) - MS_NEXT_X;
+    const int dy = static_cast<int>(y) - MS_BTN_Y;
+    return dx * dx + dy * dy <= MS_BTN_HIT * MS_BTN_HIT;
+}
+
+bool Waveshare185CDisplay::hitMediaStop(uint16_t x, uint16_t y) const {
+    if (!mediaScreen_) return false;
+    const int dx = static_cast<int>(x) - MS_STOP_X;
+    const int dy = static_cast<int>(y) - MS_STOP_Y;
+    return dx * dx + dy * dy <= MS_STOP_HIT * MS_STOP_HIT;
 }
