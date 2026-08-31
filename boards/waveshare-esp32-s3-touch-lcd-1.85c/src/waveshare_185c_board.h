@@ -9,24 +9,40 @@ class Waveshare185CBoard : public Board {
 public:
     bool begin() override;
     void loop() override;
-    const char* model() const override { return "Waveshare ESP32-S3-Touch-LCD-1.85C V2"; }
+    const char* model()   const override { return "Waveshare ESP32-S3-Touch-LCD-1.85C V2"; }
     const char* profile() const override { return "waveshare-esp32-s3-touch-lcd-1.85c"; }
     BoardCapabilities capabilities() const override;
     AudioIO& audio() override { return audio_; }
     bool consumeVoiceTrigger() override;
-    bool consumeMuteToggle() override;
+    bool consumeMuteToggle()   override;
     void setDisplayName(const String& name) override;
     void setState(SatelliteState state, const String& detail) override;
     void showTranscript(const String& text) override;
-    void showAssistant(const String& text) override;
+    void showAssistant(const String& text)  override;
+    void showMedia(const MediaInfo& info)   override { display_.showMedia(info); }
+
+    // Consumed once per tap, like consumeVoiceTrigger().
+    // Returns true if the play/pause button was tapped.
+    bool consumeMediaPlayPause();
+    // Returns true if the previous-track button was tapped.
+    bool consumeMediaPrev();
+    // Returns true if the next-track button was tapped.
+    bool consumeMediaNext();
+
 private:
     Waveshare185CExpander expander_;
-    Waveshare185CTouch touch_;
-    Waveshare185CDisplay display_;
-    Waveshare185CAudio audio_;
-    bool trigger_ = false;
-    bool muteToggle_ = false;
-    bool lastBoot_ = false;
-    uint32_t lastBootEdgeAt_ = 0;
+    Waveshare185CTouch    touch_;
+    Waveshare185CDisplay  display_;
+    Waveshare185CAudio    audio_;
+
+    bool     trigger_            = false;
+    bool     muteToggle_         = false;
+    bool     lastBoot_           = false;
+    uint32_t lastBootEdgeAt_     = 0;
     uint32_t lastVolumeActionAt_ = 0;
+
+    // Media touch flags — set in loop(), cleared by consume*()
+    bool     mediaPlayPause_ = false;
+    bool     mediaPrev_      = false;
+    bool     mediaNext_      = false;
 };

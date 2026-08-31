@@ -4,8 +4,6 @@
 
 bool Waveshare185CBoard::begin() {
     Serial.println("Waveshare Init: I2C ...");
-    // This is the single owner/initialization point for the Waveshare shared
-    // I2C bus. Audio codecs must reuse Wire without reinitializing it.
     if (!Wire.begin(waveshare185c::I2C_SDA, waveshare185c::I2C_SCL, 100000)) {
         Serial.println("Waveshare I2C-Bus konnte nicht initialisiert werden.");
         return false;
@@ -43,6 +41,7 @@ bool Waveshare185CBoard::begin() {
     Serial.println("Waveshare 1.85C V2: Touch CENTER = sprechen/stoppen");
     Serial.println("Waveshare 1.85C V2: Touch MIC links = stumm/zuhoeren");
     Serial.println("Waveshare 1.85C V2: Touch +/- rechts = Lautstaerke, NET = Netzwerkdetails");
+    Serial.println("Waveshare 1.85C V2: Media-Controls: ⏮ ⏸/▶ ⏭ (unten, bei aktiver Wiedergabe)");
     Serial.println("Waveshare 1.85C V2: BOOT = Display an/aus; RESET bleibt Hardware-Reset");
     return true;
 }
@@ -56,16 +55,15 @@ void Waveshare185CBoard::loop() {
         Serial.printf("Touch: x=%u y=%u\n", point.x, point.y);
 
         if (display_.networkPopupVisible()) {
+            // Network popup captures all touches.
             if (display_.hitNetworkCloseButton(point.x, point.y) ||
                 display_.hitNetworkButton(point.x, point.y)) {
                 display_.toggleNetworkPopup();
             }
         } else if (display_.hitNetworkButton(point.x, point.y)) {
             display_.toggleNetworkPopup();
+
         } else if (display_.hitVolumeDown(point.x, point.y)) {
-            // The CST816 can occasionally produce a second tap edge while the
-            // finger is still leaving the glass.  Keep volume changes one-shot
-            // without slowing down the other UI controls.
             if (lastVolumeActionAt_ == 0 || now - lastVolumeActionAt_ >= 300) {
                 lastVolumeActionAt_ = now;
                 const uint8_t current = audio_.volume();
@@ -79,6 +77,24 @@ void Waveshare185CBoard::loop() {
                 const uint8_t next = current >= 90 ? 100 : static_cast<uint8_t>(current + 10);
                 if (audio_.setVolume(next)) display_.setVolumePercent(next);
             }
+
+        // ── Media controls — only dispatched when overlay is visible ────────
+        } else if (display_.mediaOverlayActive() &&
+                   display_.hitMediaPlayPause(point.x, point.y)) {
+            mediaPlayPause_ = true;
+            Serial.println("Media: Play/Pause");
+
+        } else if (display_.mediaOverlayActive() &&
+                   display_.hitMediaPrev(point.x, point.y)) {
+            mediaPrev_ = true;
+            Serial.println("Media: Prev");
+
+        } else if (display_.mediaOverlayActive() &&
+                   display_.hitMediaNext(point.x, point.y)) {
+            mediaNext_ = true;
+            Serial.println("Media: Next");
+
+        // ── Standard voice controls ─────────────────────────────────────────
         } else if (display_.hitMicButton(point.x, point.y)) {
             muteToggle_ = true;
         } else if (display_.hitCenterRecordButton(point.x, point.y)) {
@@ -98,27 +114,31 @@ void Waveshare185CBoard::loop() {
 }
 
 BoardCapabilities Waveshare185CBoard::capabilities() const {
-    return {.microphone=true, .speaker=true, .display=true, .touch=true, .buttons=true, .psram=true, .sdcard=true};
+    return {.microphone=true, .speaker=true, .display=true,
+            .touch=true, .buttons=true, .psram=true, .sdcard=true};
 }
 
 bool Waveshare185CBoard::consumeVoiceTrigger() {
-    const bool value = trigger_;
-    trigger_ = false;
-    return value;
+    const bool v = trigger_; trigger_ = false; return v;
 }
-
 bool Waveshare185CBoard::consumeMuteToggle() {
-    const bool value = muteToggle_;
-    muteToggle_ = false;
-    return value;
+    const bool v = muteToggle_; muteToggle_ = false; return v;
+}
+bool Waveshare185CBoard::consumeMediaPlayPause() {
+    const bool v = mediaPlayPause_; mediaPlayPause_ = false; return v;
+}
+bool Waveshare185CBoard::consumeMediaPrev() {
+    const bool v = mediaPrev_; mediaPrev_ = false; return v;
+}
+bool Waveshare185CBoard::consumeMediaNext() {
+    const bool v = mediaNext_; mediaNext_ = false; return v;
 }
 
 void Waveshare185CBoard::setDisplayName(const String& name) {
     display_.setDisplayName(name);
 }
-
 void Waveshare185CBoard::setState(SatelliteState state, const String& detail) {
     display_.showState(state, detail);
 }
 void Waveshare185CBoard::showTranscript(const String& text) { display_.showTranscript(text); }
-void Waveshare185CBoard::showAssistant(const String& text) { display_.showAssistant(text); }
+void Waveshare185CBoard::showAssistant(const String& text)  { display_.showAssistant(text);  }

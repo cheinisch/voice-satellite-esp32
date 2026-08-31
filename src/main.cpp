@@ -4,6 +4,7 @@
 #include "build_info.h"
 #include "core/satellite.h"
 #include "voice_satellite_config.h"
+#include "voice_satellite_media_playback.h"
 
 namespace {
 Board& board = selectedBoard();
@@ -27,6 +28,10 @@ void setup() {
     if (!satellite.begin()) {
         Serial.println("Satellite konnte nicht vollständig initialisiert werden.");
     }
+
+    // Verbinde Media-Layer mit Board-Display.
+    // Muss nach satellite.begin() stehen, damit das Board vollständig initialisiert ist.
+    jarvisMediaSetBoard(&board);
 }
 
 void loop() {

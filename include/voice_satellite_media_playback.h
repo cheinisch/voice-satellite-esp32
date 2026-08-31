@@ -2,9 +2,10 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include "board/board.h"
 
 /*
- * Jarvis Media Playback v1
+ * Voice Satellite Media Playback v1
  *
  * The implementation is active only for the Waveshare profile when
  * JARVIS_MEDIA_PLAYBACK=1 is injected by platformio.ini.
@@ -39,3 +40,11 @@ bool jarvisMediaPollState(String& state_json);
  * session.start / microphone recording is started.
  */
 void jarvisMediaInterruptForVoice();
+
+/*
+ * Register the board so the media layer can update the display overlay
+ * whenever playback state changes (play, pause, stop).
+ * Call once from setup(), after the board is initialized.
+ */
+class Board;
+void jarvisMediaSetBoard(Board* board);

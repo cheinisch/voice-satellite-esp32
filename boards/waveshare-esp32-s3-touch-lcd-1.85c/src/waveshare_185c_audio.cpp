@@ -14,14 +14,8 @@ using namespace audio_driver;
 
 namespace {
 
-// ES7210 configuration follows the Waveshare V2 reference firmware for
-// ESP32-S3-Touch-LCD-1.85C: 16 kHz, 16-bit, stereo, standard I2S,
-// MCLK = 256 * Fs = 4.096 MHz, 2.87 V mic bias and 36 dB analog gain.
-//
-// We intentionally configure the ES7210 directly over the already-running
-// shared Wire bus. The generic arduino-audio-driver ES7210 wrapper uses a
-// different init sequence and did not produce RX samples on this board.
 constexpr uint8_t ES7210 = waveshare185c::ES7210_ADDR;
+Waveshare185CAudio* activeAudioInstance = nullptr;
 
 bool wireProbe(uint8_t address) {
     Wire.beginTransmission(address);
@@ -58,55 +52,44 @@ bool initEs7210Waveshare() {
 
     struct RegValue { uint8_t reg; uint8_t value; };
     static constexpr RegValue init[] = {
-        // Software reset / initial state
         {0x00, 0xFF},
         {0x00, 0x32},
         {0x09, 0x30},
         {0x0A, 0x30},
 
-        // ADC1..4 high-pass filters
         {0x23, 0x2A},
         {0x22, 0x0A},
         {0x21, 0x2A},
         {0x20, 0x0A},
 
-        // Standard I2S, 16 bit, stereo/TDM disabled
         {0x11, 0x60},
         {0x12, 0x00},
 
-        // Analog power + microphone bias
         {0x40, 0xC3},
-        {0x41, 0x70}, // MIC1/2 bias 2.87 V
-        {0x42, 0x70}, // MIC3/4 bias 2.87 V
+        {0x41, 0x70},
+        {0x42, 0x70},
 
-        // 36 dB analog gain. ES7210 gain code 13 OR 0x10 = 0x1D.
         {0x43, 0x1D},
         {0x44, 0x1D},
         {0x45, 0x1D},
         {0x46, 0x1D},
 
-        // Power on MIC1..4
         {0x47, 0x08},
         {0x48, 0x08},
         {0x49, 0x08},
         {0x4A, 0x08},
 
-        // 16 kHz with MCLK ratio 256 -> 4.096 MHz.
-        // Values are the Waveshare/Espressif ES7210 coefficient table.
-        {0x07, 0x20}, // OSR
-        {0x02, 0xC1}, // adc_div=1, doubler=1, dll=1
-        {0x04, 0x01}, // LRCK divider high
-        {0x05, 0x00}, // LRCK divider low
+        {0x07, 0x20},
+        {0x02, 0xC1},
+        {0x04, 0x01},
+        {0x05, 0x00},
 
-        // Power / enable sequence
         {0x06, 0x04},
         {0x4B, 0x0F},
         {0x4C, 0x0F},
         {0x00, 0x71},
         {0x00, 0x41},
 
-        // ADC digital volume: 0 dB (0xBF). Keep the first hardware test
-        // conservative; analog microphone gain is already 36 dB.
         {0x1B, 0xBF},
         {0x1C, 0xBF},
         {0x1D, 0xBF},
@@ -146,8 +129,7 @@ struct Waveshare185CAudio::Impl {
     DriverPins speakerPins;
     AudioDriverES8311Class speakerDriver;
     AudioBoard speakerBoard{speakerDriver, speakerPins};
-    // Match the official Waveshare V2 Arduino example: let ESP_I2S pick
-    // the available controller automatically instead of forcing I2S1.
+
     I2SClass i2s;
     uint32_t lastRxDebugAt = 0;
     bool micStarted = false;
@@ -156,17 +138,29 @@ struct Waveshare185CAudio::Impl {
     bool speakerPinsConfigured = false;
     bool wakeWordStarted = false;
     bool wakeWordPaused = false;
+    bool restartWakeWordAfterMedia = false;
+    bool mediaSuspended = false;
     volatile bool wakeWordDetected = false;
-    uint8_t desiredVolume = static_cast<uint8_t>(std::clamp<int>(VOICE_SATELLITE_WAVESHARE_SPEAKER_VOLUME, 0, 100));
+    uint8_t desiredVolume = static_cast<uint8_t>(
+        std::clamp<int>(VOICE_SATELLITE_WAVESHARE_SPEAKER_VOLUME, 0, 100)
+    );
 };
 
-Waveshare185CAudio::Waveshare185CAudio() : impl_(new Impl()) {}
+Waveshare185CAudio::Waveshare185CAudio() : impl_(new Impl()) {
+    activeAudioInstance = this;
+}
+
 Waveshare185CAudio::~Waveshare185CAudio() {
 #if VOICE_SATELLITE_WAKEWORD_ENABLED
     if (impl_ && impl_->wakeWordStarted) ESP_SR.end();
     if (wakeWordOwner == this) wakeWordOwner = nullptr;
 #endif
+    if (activeAudioInstance == this) activeAudioInstance = nullptr;
     delete impl_;
+}
+
+Waveshare185CAudio* Waveshare185CAudio::activeInstance() {
+    return activeAudioInstance;
 }
 
 bool Waveshare185CAudio::startMicI2s() {
@@ -176,8 +170,6 @@ bool Waveshare185CAudio::startMicI2s() {
         delay(2);
     }
 
-    // STT uses an RX-only I2S channel. Keeping TX detached here avoids
-    // full-duplex channel interactions in Arduino-ESP32 3.3.x.
     i.i2s.setPins(waveshare185c::I2S_BCLK, waveshare185c::I2S_LRCK,
                   -1, waveshare185c::I2S_DIN, waveshare185c::I2S_MCLK);
     i.i2s.setTimeout(1000);
@@ -204,10 +196,6 @@ bool Waveshare185CAudio::startMicI2s() {
 bool Waveshare185CAudio::restoreMicPath() {
     auto& i = *impl_;
 
-    // Speaker playback changes the shared BCLK/LRCK/MCLK timing from the
-    // microphone's stereo receive format to mono TX.  Merely recreating the
-    // RX channel is not sufficient on the ES7210 after that transition: the
-    // ADC must see stable clocks and then be programmed again.
     pinMode(waveshare185c::PA_CTRL, OUTPUT);
     digitalWrite(waveshare185c::PA_CTRL, LOW);
 
@@ -217,7 +205,6 @@ bool Waveshare185CAudio::restoreMicPath() {
         return false;
     }
 
-    // Give MCLK/BCLK/LRCK a moment to become stable before touching the ADC.
     delay(20);
     if (!initEs7210Waveshare()) {
         Serial.println("Waveshare MIC Restore: ES7210 konnte nicht neu initialisiert werden.");
@@ -227,7 +214,6 @@ bool Waveshare185CAudio::restoreMicPath() {
         return false;
     }
 
-    // Discard stale DMA data accumulated while the codec was being brought up.
     int16_t discard[64 * 2];
     i.i2s.setTimeout(2);
     for (int n = 0; n < 3; ++n) {
@@ -247,9 +233,6 @@ bool Waveshare185CAudio::startSpeakerI2s() {
         delay(2);
     }
 
-    // Waveshare's playback reference uses a dedicated TX path with the
-    // left I2S slot. We use the Voice Satellite 16 kHz rate so no extra resampling
-    // is needed for TTS or the local speaker test.
     i.i2s.setPins(waveshare185c::I2S_BCLK, waveshare185c::I2S_LRCK,
                   waveshare185c::I2S_DOUT, -1, waveshare185c::I2S_MCLK);
     i.i2s.setTimeout(1000);
@@ -281,9 +264,6 @@ bool Waveshare185CAudio::begin() {
                   wireProbe(waveshare185c::ES8311_ADDR) ? "OK" : "FEHLT",
                   wireProbe(waveshare185c::ES7210_ADDR) ? "OK" : "FEHLT");
 
-    // IMPORTANT: bring up the microphone path first and independently.
-    // A speaker/ES8311 problem must never prevent STT microphone capture.
-    // The ES8311 is therefore initialized lazily on the first TTS frame.
     if (!initEs7210Waveshare()) {
         Serial.println("ES7210 Waveshare-Initialisierung fehlgeschlagen.");
         return false;
@@ -292,7 +272,6 @@ bool Waveshare185CAudio::begin() {
     if (!startMicI2s()) return false;
     delay(20);
 
-    // Keep the power amplifier muted until the first actual playback.
     pinMode(waveshare185c::PA_CTRL, OUTPUT);
     digitalWrite(waveshare185c::PA_CTRL, LOW);
 
@@ -318,9 +297,6 @@ bool Waveshare185CAudio::beginWakeWord() {
     i.wakeWordDetected = false;
     ESP_SR.onEvent(onWakeWordEvent);
 
-    // The ES7210 delivers two 16-bit microphone channels at 16 kHz. WakeNet
-    // therefore receives a stereo MM stream directly from the existing I2S
-    // instance; it does not open a second hardware I2S controller.
     if (!ESP_SR.begin(i.i2s, nullptr, 0, SR_CHANNELS_STEREO, SR_MODE_WAKEWORD, "MM")) {
         Serial.println("WakeNet: ESP_SR konnte nicht gestartet werden. Ist srmodels.bin geflasht?");
         wakeWordOwner = nullptr;
@@ -395,6 +371,74 @@ const char* Waveshare185CAudio::wakeWordName() const {
     return VOICE_SATELLITE_WAKEWORD_NAME;
 }
 
+bool Waveshare185CAudio::suspendForMediaPlayback() {
+    auto& i = *impl_;
+    if (i.mediaSuspended) return true;
+
+    Serial.println("[media] Waveshare Audio: gebe I2S fuer Media Playback frei ...");
+
+#if VOICE_SATELLITE_WAKEWORD_ENABLED
+    i.restartWakeWordAfterMedia = i.wakeWordStarted;
+    if (i.wakeWordStarted) {
+        ESP_SR.end();
+        i.wakeWordStarted = false;
+        i.wakeWordPaused = false;
+        i.wakeWordDetected = false;
+        if (wakeWordOwner == this) wakeWordOwner = nullptr;
+    }
+#endif
+
+    pinMode(waveshare185c::PA_CTRL, OUTPUT);
+    digitalWrite(waveshare185c::PA_CTRL, LOW);
+
+    if (i.i2s.txChan() || i.i2s.rxChan()) {
+        i.i2s.end();
+        delay(4);
+    }
+
+    i.micStarted = false;
+    i.playbackMode = false;
+
+    // If TTS already initialized the ES8311, invalidate that codec state.
+    // Media Playback uses its own 44.1 kHz codec profile. Future TTS must
+    // therefore initialize the 16 kHz profile again.
+    if (i.speakerStarted) {
+        i.speakerBoard.setMute(true);
+        i.speakerDriver.end();
+        i.speakerStarted = false;
+    }
+
+    i.mediaSuspended = true;
+    Serial.println("[media] Waveshare Audio: I2S ist frei.");
+    return true;
+}
+
+bool Waveshare185CAudio::resumeAfterMediaPlayback() {
+    auto& i = *impl_;
+    if (!i.mediaSuspended) return true;
+
+    Serial.println("[media] Waveshare Audio: stelle Mikrofonpfad wieder her ...");
+    i.mediaSuspended = false;
+
+    if (!restoreMicPath()) {
+        Serial.println("[media] Waveshare Audio: Mikrofon-Restore fehlgeschlagen.");
+        return false;
+    }
+
+#if VOICE_SATELLITE_WAKEWORD_ENABLED
+    if (i.restartWakeWordAfterMedia) {
+        i.restartWakeWordAfterMedia = false;
+        if (!beginWakeWord()) {
+            Serial.println("[media] Waveshare Audio: WakeNet-Restore fehlgeschlagen.");
+            return false;
+        }
+    }
+#endif
+
+    Serial.println("[media] Waveshare Audio: Mikrofon/WakeNet wieder bereit.");
+    return true;
+}
+
 bool Waveshare185CAudio::ensureSpeaker() {
     auto& i = *impl_;
 
@@ -407,7 +451,6 @@ bool Waveshare185CAudio::ensureSpeaker() {
         }
 
         if (!i.speakerPinsConfigured) {
-            // Reuse the shared Wire bus. Do not call Wire.begin()/Wire.end().
             i.speakerPins.addI2C(PinFunction::CODEC, Wire, false);
             i.speakerPins.addI2S(PinFunction::CODEC,
                                  waveshare185c::I2S_MCLK, waveshare185c::I2S_BCLK,
@@ -423,7 +466,7 @@ bool Waveshare185CAudio::ensureSpeaker() {
         outCfg.i2s.rate = RATE_16K;
         outCfg.i2s.channels = CHANNELS2;
         outCfg.i2s.fmt = I2S_NORMAL;
-        outCfg.i2s.mode = MODE_SLAVE; // ESP32-S3 provides BCLK/LRCK/MCLK
+        outCfg.i2s.mode = MODE_SLAVE;
 
         Serial.println("ES8311: initialisiere Codec fuer 16 kHz / 16 Bit I2S ...");
         if (!i.speakerBoard.begin(outCfg)) {
@@ -436,7 +479,8 @@ bool Waveshare185CAudio::ensureSpeaker() {
             Serial.println("ES8311 Warnung: Lautstaerke konnte nicht gesetzt werden.");
         }
         i.speakerStarted = true;
-        Serial.printf("ES8311/Lautsprecher-Codec bereit, Volume=%u%%.\n", static_cast<unsigned>(i.desiredVolume));
+        Serial.printf("ES8311/Lautsprecher-Codec bereit, Volume=%u%%.\n",
+                      static_cast<unsigned>(i.desiredVolume));
     }
 
     if (!i.playbackMode) {
@@ -472,20 +516,25 @@ size_t Waveshare185CAudio::readPcm16(int16_t* dst, size_t samples, uint32_t time
     const size_t wantMono = std::min(samples, MAX_MONO);
     int16_t stereo[MAX_MONO * 2];
     impl_->i2s.setTimeout(timeoutMs > 0 ? timeoutMs : 1);
-    const size_t bytes = impl_->i2s.readBytes(reinterpret_cast<char*>(stereo), wantMono * 2 * sizeof(int16_t));
+    const size_t bytes = impl_->i2s.readBytes(
+        reinterpret_cast<char*>(stereo),
+        wantMono * 2 * sizeof(int16_t)
+    );
     if (bytes == 0) {
         const uint32_t now = millis();
         if (now - impl_->lastRxDebugAt >= 1000) {
             impl_->lastRxDebugAt = now;
             uint8_t reg00 = 0xFF;
             const bool codecRead = readReg(ES7210, 0x00, reg00);
-            Serial.printf("Waveshare MIC RX: 0 Bytes (Port=%d RX=%s available=%d lastError=%d ES7210=%s REG00=0x%02X)\n",
-                          static_cast<int>(impl_->i2s.getPort()),
-                          impl_->i2s.rxChan() ? "ja" : "nein",
-                          impl_->i2s.available(),
-                          impl_->i2s.lastError(),
-                          codecRead ? "OK" : "I2C-FEHLER",
-                          reg00);
+            Serial.printf(
+                "Waveshare MIC RX: 0 Bytes (Port=%d RX=%s available=%d lastError=%d ES7210=%s REG00=0x%02X)\n",
+                static_cast<int>(impl_->i2s.getPort()),
+                impl_->i2s.rxChan() ? "ja" : "nein",
+                impl_->i2s.available(),
+                impl_->i2s.lastError(),
+                codecRead ? "OK" : "I2C-FEHLER",
+                reg00
+            );
         }
         return 0;
     }
@@ -499,42 +548,51 @@ size_t Waveshare185CAudio::readPcm16(int16_t* dst, size_t samples, uint32_t time
     return frames;
 }
 
-size_t Waveshare185CAudio::writePcm16(const int16_t* src, size_t samples, uint32_t timeoutMs) {
+size_t Waveshare185CAudio::writePcm16(
+    const int16_t* src,
+    size_t samples,
+    uint32_t timeoutMs
+) {
     if (!src || samples == 0) return 0;
     if (!ensureSpeaker()) return 0;
 
     auto& i = *impl_;
     i.i2s.setTimeout(timeoutMs > 0 ? timeoutMs : 1);
     const size_t bytesRequested = samples * sizeof(int16_t);
-    const size_t bytesWritten = i.i2s.write(static_cast<const void*>(src), bytesRequested);
+    const size_t bytesWritten = i.i2s.write(
+        static_cast<const void*>(src),
+        bytesRequested
+    );
     if (bytesWritten == 0) {
-        Serial.printf("Waveshare Speaker TX: 0 Bytes (Port=%d TX=%s rate=%lu bits=%u mode=%d lastError=%d)\n",
-                      static_cast<int>(i.i2s.getPort()),
-                      i.i2s.txChan() ? "ja" : "nein",
-                      static_cast<unsigned long>(i.i2s.txSampleRate()),
-                      static_cast<unsigned>(i.i2s.txDataWidth()),
-                      static_cast<int>(i.i2s.txSlotMode()),
-                      i.i2s.lastError());
+        Serial.printf(
+            "Waveshare Speaker TX: 0 Bytes (Port=%d TX=%s rate=%lu bits=%u mode=%d lastError=%d)\n",
+            static_cast<int>(i.i2s.getPort()),
+            i.i2s.txChan() ? "ja" : "nein",
+            static_cast<unsigned long>(i.i2s.txSampleRate()),
+            static_cast<unsigned>(i.i2s.txDataWidth()),
+            static_cast<int>(i.i2s.txSlotMode()),
+            i.i2s.lastError()
+        );
         return 0;
     }
     return bytesWritten / sizeof(int16_t);
 }
 
-
 bool Waveshare185CAudio::setVolume(uint8_t percent) {
     auto& i = *impl_;
-    const uint8_t next = static_cast<uint8_t>(std::clamp<int>(percent, 0, 100));
+    const uint8_t next = static_cast<uint8_t>(
+        std::clamp<int>(percent, 0, 100)
+    );
     i.desiredVolume = next;
 
-    // The speaker codec is initialized lazily. Before the first TTS playback
-    // simply remember the requested value; ensureSpeaker() applies it later.
     if (!i.speakerStarted) {
         Serial.printf("Lautstaerke vorgemerkt: %u%%.\n", static_cast<unsigned>(next));
         return true;
     }
 
     if (!i.speakerBoard.setVolume(next)) {
-        Serial.printf("ES8311: Lautstaerke %u%% konnte nicht gesetzt werden.\n", static_cast<unsigned>(next));
+        Serial.printf("ES8311: Lautstaerke %u%% konnte nicht gesetzt werden.\n",
+                      static_cast<unsigned>(next));
         return false;
     }
     Serial.printf("Lautstaerke: %u%%.\n", static_cast<unsigned>(next));
@@ -542,24 +600,22 @@ bool Waveshare185CAudio::setVolume(uint8_t percent) {
 }
 
 uint8_t Waveshare185CAudio::volume() const {
-    return impl_ ? impl_->desiredVolume : static_cast<uint8_t>(VOICE_SATELLITE_WAVESHARE_SPEAKER_VOLUME);
+    return impl_
+        ? impl_->desiredVolume
+        : static_cast<uint8_t>(VOICE_SATELLITE_WAVESHARE_SPEAKER_VOLUME);
 }
 
 void Waveshare185CAudio::clearOutput() {
     auto& i = *impl_;
-    // Mute the external NS4150B PA between speech turns to reduce noise/echo.
     pinMode(waveshare185c::PA_CTRL, OUTPUT);
     digitalWrite(waveshare185c::PA_CTRL, LOW);
 
-    // Playback uses a dedicated TX-only channel.  Restore both the RX
-    // transport *and* the ES7210 register state.  Also repair the microphone
-    // if a previous transition failed, so the next STT/TTS recording does not
-    // start in a permanently broken state.
     if (i.playbackMode || !i.micStarted) {
         delay(2);
         if (!restoreMicPath()) {
-            Serial.println("WARNUNG: Mikrofonpfad konnte nach Speaker-Wiedergabe nicht wiederhergestellt werden.");
+            Serial.println(
+                "WARNUNG: Mikrofonpfad konnte nach Speaker-Wiedergabe nicht wiederhergestellt werden."
+            );
         }
     }
 }
-

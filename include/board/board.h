@@ -3,6 +3,17 @@
 #include <Arduino.h>
 #include "audio/audio_io.h"
 
+// ---------------------------------------------------------------------------
+// Media overlay — used by the display layer to show playback controls.
+// Defined here so board.h is the single include needed by the media layer.
+// ---------------------------------------------------------------------------
+struct MediaInfo {
+    String title;
+    String artist;
+    bool   playing = false;  // true = playing, false = paused/stopped
+    bool   active  = false;  // overlay visible at all
+};
+
 enum class SatelliteState {
     Booting,
     ConnectingWifi,
@@ -47,4 +58,7 @@ public:
     virtual void setState(SatelliteState state, const String& detail = String()) = 0;
     virtual void showTranscript(const String& text) = 0;
     virtual void showAssistant(const String& text) = 0;
+
+    // Optional media overlay — headless boards provide a no-op default.
+    virtual void showMedia(const MediaInfo& info) { (void)info; }
 };

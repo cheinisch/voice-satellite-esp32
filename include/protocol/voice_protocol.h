@@ -23,7 +23,7 @@ public:
     using BinaryHandler = std::function<void(const uint8_t*, size_t)>;
     using EventHandler = std::function<void(VoiceEvent, const String&)>;
 
-    void begin(const Board& board);
+    void begin(Board& board);
     void loop();
     bool connected() const { return connected_; }
     bool ready() const { return ready_; }
@@ -52,7 +52,7 @@ private:
     bool ready_ = false;
     String displayName_ = "Voice Satellite";
     bool binaryFragmentActive_ = false;
-    const Board* board_ = nullptr;
+    Board* board_ = nullptr;
     BinaryHandler binaryHandler_;
     EventHandler eventHandler_;
     uint32_t ttsSampleRate_ = 16000;

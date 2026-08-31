@@ -13,12 +13,24 @@ public:
     void showState(SatelliteState state, const String& detail);
     void showTranscript(const String& text);
     void showAssistant(const String& text);
+
+    // ---- existing touch hit-tests ----
     bool hitCenterRecordButton(uint16_t x, uint16_t y) const;
     bool hitMicButton(uint16_t x, uint16_t y) const;
     bool hitNetworkButton(uint16_t x, uint16_t y) const;
     bool hitNetworkCloseButton(uint16_t x, uint16_t y) const;
     bool hitVolumeDown(uint16_t x, uint16_t y) const;
     bool hitVolumeUp(uint16_t x, uint16_t y) const;
+
+    // ---- media overlay ----
+    // Call to show / update the media panel.  Passing active=false removes it.
+    void showMedia(const MediaInfo& info);
+    // Touch hit-tests for the media controls (only valid when overlay active).
+    bool hitMediaPlayPause(uint16_t x, uint16_t y) const;
+    bool hitMediaPrev(uint16_t x, uint16_t y) const;
+    bool hitMediaNext(uint16_t x, uint16_t y) const;
+    bool mediaOverlayActive() const { return media_.active; }
+
     void toggleNetworkPopup();
     bool networkPopupVisible() const { return networkPopupVisible_; }
     void setVolumePercent(uint8_t percent);
@@ -40,6 +52,7 @@ private:
     bool             networkPopupVisible_ = false;
     bool             messageBubbleVisible_ = false;
     uint8_t          volumePercent_ = 70;
+    MediaInfo        media_;
 
     void renderDashboard();
     void renderCenterState(bool updateMic = false);
@@ -51,6 +64,10 @@ private:
     void renderNetworkButton();
     void renderVolumeControls(bool partial = false);
     void renderNetworkPopup();
+
+    // Media overlay rendering helpers
+    void renderMediaOverlay();
+    void clearMediaOverlay();
 
     int  textWidth(const String& text, const uint8_t* font);
     void fontText(const String& text, int x, int topY, uint16_t color,

@@ -1,6 +1,8 @@
 #include "protocol/voice_protocol.h"
 #include "build_info.h"
 #include "voice_satellite_config.h"
+#include "voice_satellite_media_playback.h"
+#include "waveshare_185c_board.h"
 #include <ArduinoJson.h>
 #include <cstring>
 
@@ -30,7 +32,7 @@ const char* normalizedTtsQuality() {
 }
 }
 
-void VoiceProtocol::begin(const Board& board) {
+void VoiceProtocol::begin(Board& board) {
     board_ = &board;
 
     // ESP32 clients can send an Authorization header during the HTTP WebSocket
@@ -60,6 +62,40 @@ void VoiceProtocol::begin(const Board& board) {
 
 void VoiceProtocol::loop() {
     ws_.loop();
+    jarvisMediaLoop();
+
+    if (connected_) {
+        String mediaState;
+        if (jarvisMediaPollState(mediaState)) {
+            sendJson(mediaState);
+        }
+
+        // Poll media touch controls from the board and send commands to Core.
+        if (board_) {
+            auto* wb = static_cast<Waveshare185CBoard*>(board_);
+            if (wb->consumeMediaPlayPause()) {
+                JsonDocument cmd;
+                cmd["type"] = "media.toggle";
+                String out; serializeJson(cmd, out);
+                sendJson(out);
+                Serial.println("[media] Touch: play/pause -> Core");
+            }
+            if (wb->consumeMediaPrev()) {
+                JsonDocument cmd;
+                cmd["type"] = "media.previous";
+                String out; serializeJson(cmd, out);
+                sendJson(out);
+                Serial.println("[media] Touch: prev -> Core");
+            }
+            if (wb->consumeMediaNext()) {
+                JsonDocument cmd;
+                cmd["type"] = "media.next";
+                String out; serializeJson(cmd, out);
+                sendJson(out);
+                Serial.println("[media] Touch: next -> Core");
+            }
+        }
+    }
 }
 
 void VoiceProtocol::emit(VoiceEvent event, const String& text) {
@@ -74,6 +110,9 @@ void VoiceProtocol::onEvent(WStype_t type, uint8_t* payload, size_t length) {
             Serial.printf("Core verbunden: %s:%d%s\n", VOICE_SATELLITE_CORE_HOST, VOICE_SATELLITE_CORE_PORT, VOICE_SATELLITE_CORE_PATH);
             emit(VoiceEvent::Connected);
 #if VOICE_SATELLITE_SEND_HELLO
+            sendHello();
+#elif defined(JARVIS_MEDIA_PLAYBACK) && JARVIS_MEDIA_PLAYBACK
+            // Media outputs must advertise themselves to the Core.
             sendHello();
 #endif
             break;
@@ -120,10 +159,12 @@ void VoiceProtocol::sendHello() {
     doc["satellite_id"] = VOICE_SATELLITE_ID;
     doc["satellite_name"] = VOICE_SATELLITE_NAME;
     doc["transport"] = "websocket";
+    doc["platform"] = "esp32";
 
     if (board_) {
         doc["board_model"] = board_->model();
         doc["board_profile"] = board_->profile();
+        doc["board"] = board_->profile();
         const BoardCapabilities caps = board_->capabilities();
         JsonObject capabilities = doc["capabilities"].to<JsonObject>();
         capabilities["microphone"] = caps.microphone;
@@ -139,6 +180,11 @@ void VoiceProtocol::sendHello() {
     audio["format"] = "pcm_s16le";
     audio["sample_rate"] = VOICE_SATELLITE_AUDIO_RATE;
     audio["channels"] = VOICE_SATELLITE_AUDIO_CHANNELS;
+
+    // Adds top-level features.media + media.formats/controls. The Core accepts
+    // these fields on the existing hello message and registers this connection
+    // as a media output.
+    jarvisMediaAugmentCapabilities(doc);
 
     String out;
     serializeJson(doc, out);
@@ -182,7 +228,22 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         return;
     }
 
+    String mediaResponse;
+    if (jarvisMediaHandleMessage(doc, mediaResponse)) {
+        if (mediaResponse.length()) {
+            sendJson(mediaResponse);
+        }
+        return;
+    }
+
     const char* type = doc["type"] | "";
+
+    if (!strcmp(type, "client.capabilities.accepted")) {
+        const bool mediaAccepted = doc["media"] | false;
+        Serial.printf("Media Capability: %s\n", mediaAccepted ? "akzeptiert" : "nicht aktiv");
+        return;
+    }
+
     if (!strcmp(type, "hello") || !strcmp(type, "hello_ack") || !strcmp(type, "welcome") || !strcmp(type, "ready")) {
         const bool wasReady = ready_;
         ready_ = true;
@@ -282,6 +343,9 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
 }
 
 void VoiceProtocol::sendSessionStart(bool autoTts) {
+    // The voice path gets the speaker/microphone resources before a new round.
+    jarvisMediaInterruptForVoice();
+
     JsonDocument doc;
     doc["type"] = "session.start";
     doc["language"] = "de";

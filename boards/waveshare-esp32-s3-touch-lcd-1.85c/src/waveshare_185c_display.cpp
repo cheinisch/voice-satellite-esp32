@@ -385,6 +385,7 @@ void Waveshare185CDisplay::clearMessageArea() {
     // Clear only that area instead of rebuilding the whole dashboard.
     gfx_->fillRect(126, 282, 108, 68, BG);
     messageBubbleVisible_ = false;
+    if (media_.active) renderMediaOverlay();
 }
 
 void Waveshare185CDisplay::renderCenterState(bool updateMic) {
@@ -593,6 +594,7 @@ void Waveshare185CDisplay::renderDashboard() {
     renderVolumeControls();
     renderNetworkButton();
     if (networkPopupVisible_) renderNetworkPopup();
+    if (media_.active) renderMediaOverlay();
 }
 
 void Waveshare185CDisplay::showState(SatelliteState state, const String& detail) {
@@ -620,6 +622,7 @@ void Waveshare185CDisplay::showState(SatelliteState state, const String& detail)
     }
 
     renderCenterState(muteChanged);
+    if (media_.active && !networkPopupVisible_) renderMediaOverlay();
 }
 
 // ---------------------------------------------------------------------------
@@ -744,3 +747,145 @@ bool Waveshare185CDisplay::hitVolumeUp(uint16_t x, uint16_t y) const {
     return dx * dx + dy * dy <= VOL_HIT_R * VOL_HIT_R;
 }
 
+// ---------------------------------------------------------------------------
+// Media overlay
+// ---------------------------------------------------------------------------
+//
+//  Layout on the 360x360 round display (bottom third, below the voice ring):
+//
+//   y=240  ┌──────────────────────────────────┐
+//          │ ♪  <Title bold>                  │
+//          │    <Artist muted>                │
+//          │  ─────────────────────────────   │
+//   y=302  │   [⏮]        [⏸/▶]      [⏭]   │
+//   y=332  └──────────────────────────────────┘
+//
+//  The voice-ring centre is at y≈183 — no overlap with this panel.
+// ---------------------------------------------------------------------------
+
+namespace {
+constexpr int MEDIA_PANEL_Y  = 220;
+constexpr int MEDIA_PANEL_H  = 92;
+constexpr int MEDIA_PANEL_X  = 54;
+constexpr int MEDIA_PANEL_W  = 252;
+
+constexpr int MEDIA_BTN_Y    = 282;
+constexpr int MEDIA_PLAY_X   = 180;
+constexpr int MEDIA_PREV_X   = 108;
+constexpr int MEDIA_NEXT_X   = 252;
+constexpr int MEDIA_BTN_R    = 20;
+constexpr int MEDIA_BTN_HIT  = 32;
+
+constexpr int MEDIA_TITLE_Y  = 235;
+constexpr int MEDIA_ARTIST_Y = 249;
+} // namespace
+
+void Waveshare185CDisplay::showMedia(const MediaInfo& info) {
+    const bool wasActive = media_.active;
+    media_ = info;
+
+    if (!ready_ || !displayOn_ || networkPopupVisible_) return;
+
+    if (!info.active) {
+        if (wasActive) clearMediaOverlay();
+        return;
+    }
+    renderMediaOverlay();
+}
+
+void Waveshare185CDisplay::renderMediaOverlay() {
+    if (!ready_ || !displayOn_) return;
+
+    // ── Panel background ────────────────────────────────────────────────────
+    gfx_->fillRoundRect(MEDIA_PANEL_X, MEDIA_PANEL_Y,
+                        MEDIA_PANEL_W, MEDIA_PANEL_H, 12, PANEL_2);
+    gfx_->drawRoundRect(MEDIA_PANEL_X, MEDIA_PANEL_Y,
+                        MEDIA_PANEL_W, MEDIA_PANEL_H, 12, BORDER);
+
+    // ── Music note icon (top-left corner of panel) ──────────────────────────
+    const uint16_t accent = CYAN;
+    const int noteX = MEDIA_PANEL_X + 10;
+    const int noteY = MEDIA_TITLE_Y + 2;
+    gfx_->drawLine(noteX + 8, noteY - 6, noteX + 8, noteY + 6, accent); // stem
+    gfx_->drawLine(noteX + 8, noteY - 6, noteX + 13, noteY - 3, accent); // flag
+    gfx_->fillCircle(noteX + 5, noteY + 7, 4, accent);                   // head
+
+    // ── Title and artist text ───────────────────────────────────────────────
+    const int textLeft = MEDIA_PANEL_X + 24;
+
+    const String title  = compact(
+        media_.title.length()  ? media_.title  : "Unbekannter Titel",    28);
+    const String artist = compact(
+        media_.artist.length() ? media_.artist : "Unbekannter Interpret", 28);
+
+    fontText(title,  textLeft, MEDIA_TITLE_Y,  TEXT,      u8g2_font_helvB10_tf);
+    fontText(artist, textLeft, MEDIA_ARTIST_Y, MUTED_TXT, u8g2_font_helvR10_tf);
+
+    // ── Separator ───────────────────────────────────────────────────────────
+    gfx_->drawLine(MEDIA_PANEL_X + 12, MEDIA_PANEL_Y + 38,
+                   MEDIA_PANEL_X + MEDIA_PANEL_W - 12, MEDIA_PANEL_Y + 38,
+                   BORDER);
+
+    // ── Prev ⏮ ──────────────────────────────────────────────────────────────
+    gfx_->fillCircle(MEDIA_PREV_X, MEDIA_BTN_Y, MEDIA_BTN_R, PANEL_2);
+    gfx_->drawCircle(MEDIA_PREV_X, MEDIA_BTN_Y, MEDIA_BTN_R, BORDER);
+    // Two left-pointing triangles (◀◀)
+    for (int t = 0; t < 2; t++) {
+        const int ax = MEDIA_PREV_X + 5 - t * 7;
+        gfx_->drawLine(ax,     MEDIA_BTN_Y - 6, ax - 6, MEDIA_BTN_Y,     MUTED_TXT);
+        gfx_->drawLine(ax - 6, MEDIA_BTN_Y,     ax,     MEDIA_BTN_Y + 6, MUTED_TXT);
+        gfx_->drawLine(ax,     MEDIA_BTN_Y - 6, ax,     MEDIA_BTN_Y + 6, MUTED_TXT);
+    }
+
+    // ── Play / Pause ⏸/▶ ────────────────────────────────────────────────────
+    gfx_->fillCircle(MEDIA_PLAY_X, MEDIA_BTN_Y, MEDIA_BTN_R, PANEL_2);
+    gfx_->drawCircle(MEDIA_PLAY_X, MEDIA_BTN_Y, MEDIA_BTN_R, accent);
+    if (media_.playing) {
+        // Pause — two vertical bars
+        gfx_->fillRect(MEDIA_PLAY_X - 6, MEDIA_BTN_Y - 6, 4, 12, accent);
+        gfx_->fillRect(MEDIA_PLAY_X + 2, MEDIA_BTN_Y - 6, 4, 12, accent);
+    } else {
+        // Play — filled right-pointing triangle
+        for (int i = 0; i < 8; i++) {
+            gfx_->drawLine(MEDIA_PLAY_X - 4 + i, MEDIA_BTN_Y - (7 - i),
+                           MEDIA_PLAY_X - 4 + i, MEDIA_BTN_Y + (7 - i), accent);
+        }
+    }
+
+    // ── Next ⏭ ──────────────────────────────────────────────────────────────
+    gfx_->fillCircle(MEDIA_NEXT_X, MEDIA_BTN_Y, MEDIA_BTN_R, PANEL_2);
+    gfx_->drawCircle(MEDIA_NEXT_X, MEDIA_BTN_Y, MEDIA_BTN_R, BORDER);
+    // Two right-pointing triangles (▶▶)
+    for (int t = 0; t < 2; t++) {
+        const int ax = MEDIA_NEXT_X - 5 + t * 7;
+        gfx_->drawLine(ax,     MEDIA_BTN_Y - 6, ax + 6, MEDIA_BTN_Y,     MUTED_TXT);
+        gfx_->drawLine(ax + 6, MEDIA_BTN_Y,     ax,     MEDIA_BTN_Y + 6, MUTED_TXT);
+        gfx_->drawLine(ax,     MEDIA_BTN_Y - 6, ax,     MEDIA_BTN_Y + 6, MUTED_TXT);
+    }
+}
+
+void Waveshare185CDisplay::clearMediaOverlay() {
+    if (!ready_ || !displayOn_) return;
+    gfx_->fillRect(0, MEDIA_PANEL_Y, 360, MEDIA_PANEL_H + 8, BG);
+}
+
+bool Waveshare185CDisplay::hitMediaPlayPause(uint16_t x, uint16_t y) const {
+    if (!media_.active) return false;
+    const int dx = static_cast<int>(x) - MEDIA_PLAY_X;
+    const int dy = static_cast<int>(y) - MEDIA_BTN_Y;
+    return dx * dx + dy * dy <= MEDIA_BTN_HIT * MEDIA_BTN_HIT;
+}
+
+bool Waveshare185CDisplay::hitMediaPrev(uint16_t x, uint16_t y) const {
+    if (!media_.active) return false;
+    const int dx = static_cast<int>(x) - MEDIA_PREV_X;
+    const int dy = static_cast<int>(y) - MEDIA_BTN_Y;
+    return dx * dx + dy * dy <= MEDIA_BTN_HIT * MEDIA_BTN_HIT;
+}
+
+bool Waveshare185CDisplay::hitMediaNext(uint16_t x, uint16_t y) const {
+    if (!media_.active) return false;
+    const int dx = static_cast<int>(x) - MEDIA_NEXT_X;
+    const int dy = static_cast<int>(y) - MEDIA_BTN_Y;
+    return dx * dx + dy * dy <= MEDIA_BTN_HIT * MEDIA_BTN_HIT;
+}
