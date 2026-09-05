@@ -58,8 +58,8 @@ void Waveshare185CBoard::loop() {
             // ── Media Screen — eigene Touch-Logik ───────────────────────────
             // VOL– / VOL+ funktionieren auch hier (gleiche Geometrie).
             // NET-Button und Voice-Controls sind gesperrt.
-            constexpr int MS_VOLDOWN_X = 96,  MS_VOLUP_X = 264;
-            constexpr int MS_VOL_Y     = 312, MS_VOL_HIT_R = 34;
+            constexpr int MS_VOLDOWN_X = 90,  MS_VOLUP_X = 270;
+            constexpr int MS_VOL_Y     = 285, MS_VOL_HIT_R = 42;
 
             const int dxD = static_cast<int>(point.x) - MS_VOLDOWN_X;
             const int dyD = static_cast<int>(point.y) - MS_VOL_Y;
@@ -83,16 +83,19 @@ void Waveshare185CBoard::loop() {
                 }
             } else if (display_.hitMediaPlayPause(point.x, point.y)) {
                 mediaPlayPause_ = true;
-                Serial.println("Media: Play/Pause");
+                Serial.printf("[BTN] PLAY/PAUSE  x=%u y=%u\n", point.x, point.y);
             } else if (display_.hitMediaPrev(point.x, point.y)) {
                 mediaPrev_ = true;
-                Serial.println("Media: Prev");
+                Serial.printf("[BTN] PREV        x=%u y=%u\n", point.x, point.y);
             } else if (display_.hitMediaNext(point.x, point.y)) {
                 mediaNext_ = true;
-                Serial.println("Media: Next");
+                Serial.printf("[BTN] NEXT        x=%u y=%u\n", point.x, point.y);
             } else if (display_.hitMediaStop(point.x, point.y)) {
                 mediaStop_ = true;
-                Serial.println("Media: Stop");
+                Serial.printf("[BTN] STOP        x=%u y=%u\n", point.x, point.y);
+            } else if (display_.mediaScreenActive()) {
+                // Touch auf Media-Screen aber kein Button getroffen — hilft bei Kalibrierung
+                Serial.printf("[BTN] miss (media screen) x=%u y=%u\n", point.x, point.y);
             }
 
         } else if (display_.networkPopupVisible()) {

@@ -83,13 +83,14 @@ void VoiceProtocol::loop() {
                 if (step > 0) cmd["step"] = step;
                 String out; serializeJson(cmd, out);
                 sendJson(out);
-                Serial.printf("[media] Touch: media.control action=%s -> Core\n", action);
+                Serial.printf("[WS] media.control -> Core: action=%s step=%d payload=%s\n",
+                              action, step, out.c_str());
             };
 
-            if (wb->consumeMediaPlayPause()) sendMediaControl("toggle");
-            if (wb->consumeMediaPrev())      sendMediaControl("volume_down", 10);  // kein prev → VOL–
-            if (wb->consumeMediaNext())      sendMediaControl("volume_up",   10);  // kein next → VOL+
-            if (wb->consumeMediaStop())      sendMediaControl("stop");
+            if (wb->consumeMediaPlayPause()) { Serial.println("[WS] consume: PLAY/PAUSE"); sendMediaControl("toggle"); }
+            if (wb->consumeMediaPrev())      { Serial.println("[WS] consume: PREV (→ volume_down)"); sendMediaControl("volume_down", 10); }
+            if (wb->consumeMediaNext())      { Serial.println("[WS] consume: NEXT (→ volume_up)");   sendMediaControl("volume_up",   10); }
+            if (wb->consumeMediaStop())      { Serial.println("[WS] consume: STOP"); sendMediaControl("stop"); }
         }
     }
 }

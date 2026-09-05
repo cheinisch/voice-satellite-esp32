@@ -534,9 +534,9 @@ void Waveshare185CDisplay::setVolumePercent(uint8_t percent) {
     if (!ready_ || !displayOn_) return;
     if (mediaScreen_) {
         // Nur die Prozentzahl in der Mitte unten aktualisieren.
-        constexpr int MS_VOL_Y = 312;
-        gfx_->fillRect(120, MS_VOL_Y - 16, 120, 16, BG);
-        centeredFont(String(volumePercent_) + "%", MS_VOL_Y - 8, MUTED_TXT, u8g2_font_helvR10_tf);
+        constexpr int MS_VOL_Y = 285;
+        gfx_->fillRect(120, 305, 120, 20, BG);
+        centeredFont(String(volumePercent_) + "%", 315, MUTED_TXT, u8g2_font_helvR10_tf);
     } else {
         renderVolumeControls(true);
     }
@@ -778,24 +778,23 @@ bool Waveshare185CDisplay::hitVolumeUp(uint16_t x, uint16_t y) const {
 // ===========================================================================
 
 namespace {
-// Geometry — Media Screen (berechnet für 360x360 RUNDES Display, Radius=180)
-// Alle Positionen geprüft: kein Element liegt außerhalb des sichtbaren Kreises.
-constexpr int MS_BTN_Y       = 270;   // Buttons: chord-width ≈ 286px → Prev/Next passen
+// Geometry — Media Screen (ohne Schallplatte, grosse Buttons)
+constexpr int MS_BTN_Y       = 200;   // Hauptbuttons gross, chord@200=336px OK
 constexpr int MS_PLAY_X      = 180;
-constexpr int MS_PREV_X      = 116;   // 116-26=90 > 33 ✓
-constexpr int MS_NEXT_X      = 244;   // 244+26=270 < 327 ✓
-constexpr int MS_BTN_R       = 26;
-constexpr int MS_BTN_HIT     = 38;
-constexpr int MS_TITLE_Y     = 188;
-constexpr int MS_ARTIST_Y    = 207;
-constexpr int MS_VOL_Y       = 312;   // chord-width ≈ 228px → VOL@96/264±18 passen ✓
-constexpr int MS_VOLDOWN_X   = 96;
-constexpr int MS_VOLUP_X     = 264;
-constexpr int MS_VOL_HIT_R   = 34;
-constexpr int MS_STOP_X      = 180;  // Stop: mittig y=305, chord~238px OK
-constexpr int MS_STOP_Y      = 305;
-constexpr int MS_STOP_R      = 18;
-constexpr int MS_STOP_HIT    = 30;
+constexpr int MS_PREV_X      = 72;
+constexpr int MS_NEXT_X      = 288;
+constexpr int MS_BTN_R       = 34;
+constexpr int MS_BTN_HIT     = 52;
+constexpr int MS_TITLE_Y     = 85;
+constexpr int MS_ARTIST_Y    = 122;
+constexpr int MS_VOL_Y       = 285;   // Untere Reihe, chord@285=272px OK
+constexpr int MS_VOLDOWN_X   = 90;
+constexpr int MS_VOLUP_X     = 270;
+constexpr int MS_VOL_HIT_R   = 42;
+constexpr int MS_STOP_X      = 180;
+constexpr int MS_STOP_Y      = 285;
+constexpr int MS_STOP_R      = 22;
+constexpr int MS_STOP_HIT    = 42;
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -806,60 +805,51 @@ void Waveshare185CDisplay::renderMediaScreen() {
 
     gfx_->fillScreen(BG);
 
-    // ── Corner brackets (wie Dashboard) ─────────────────────────────────────
+    // Corner brackets
     gfx_->drawLine( 44,  6,  84,  6, BORDER); gfx_->drawLine( 44,  6,  44, 18, BORDER);
     gfx_->drawLine(276,  6, 316,  6, BORDER); gfx_->drawLine(316,  6, 316, 18, BORDER);
     gfx_->drawLine( 44, 354,  44, 342, BORDER); gfx_->drawLine( 44, 354,  84, 354, BORDER);
     gfx_->drawLine(316, 354, 316, 342, BORDER); gfx_->drawLine(316, 354, 276, 354, BORDER);
 
-    // ── Header — bei y=36, sichtbarer Bereich x=80..280 ────────────────────
+    // Header
     centeredFont("JETZT LAUFT", 36, CYAN, u8g2_font_helvB10_tf);
-    // Trennlinie: bei y=56 Chord-Breite ≈ 232px → x=64..296
     gfx_->drawLine(68, 56, 292, 56, BORDER);
 
-    // ── Vinyl-Scheibe als Album-Art-Platzhalter ───────────────────────────────
-    // Mittelpunkt y=118, Radius 52 → bei y=118: chord≥314px, passt komplett ✓
-    gfx_->drawCircle(180, 118, 52, BORDER);
-    gfx_->drawCircle(180, 118, 51, BORDER);
-    gfx_->fillCircle(180, 118, 38, PANEL_2);
-    for (int r = 20; r <= 34; r += 7)
-        gfx_->drawCircle(180, 118, r, rgb565(18, 42, 60));
-    gfx_->fillCircle(180, 118,  8, BORDER);
-    gfx_->fillCircle(180, 118,  4, CYAN);
-
-    // ── Titel und Interpret ──────────────────────────────────────────────────
-    // y=188: chord-Breite ≈ 330px, nutzbar x=25..335 → textLeft=36, maxW=288
+    // Titel (y=85, textLeft=41, maxW=278) und Interpret (y=122)
     const String title  = media_.title.length()  ? media_.title  : "Unbekannter Titel";
     const String artist = media_.artist.length() ? media_.artist : "Unbekannter Interpret";
+    wrappedFontText(title, 41, MS_TITLE_Y, 278, 2, TEXT, u8g2_font_helvB12_tf, 18);
+    centeredFont(compact(artist, 32), MS_ARTIST_Y, MUTED_TXT, u8g2_font_helvR10_tf);
 
-    gfx_->fillRect(0, MS_TITLE_Y - 2, 360, 40, BG);
-    wrappedFontText(title, 36, MS_TITLE_Y, 288, 2, TEXT, u8g2_font_helvB12_tf, 16);
-    centeredFont(compact(artist, 30), MS_ARTIST_Y + 16, MUTED_TXT, u8g2_font_helvR10_tf);
+    // Trennlinie y=148
+    gfx_->drawLine(24, 148, 336, 148, BORDER);
 
-    // ── Trennlinie vor Buttons ────────────────────────────────────────────────
-    // y=238: chord≈306px → x=27..333
-    gfx_->drawLine(34, 238, 326, 238, BORDER);
-
-    // ── Steuerbuttons (y=270) ────────────────────────────────────────────────
+    // Hauptbuttons gross (y=200, R=34)
     renderMediaButtons();
 
-    // ── Lautstärke (y=312): chord≈228px → x=96..264 ✓ ───────────────────────
-        // Stop-Button (y=305, x=180)
+    // Trennlinie y=248
+    gfx_->drawLine(38, 248, 322, 248, BORDER);
+
+    // Untere Reihe (y=285): VOL–  STOP  VOL+
+    // VOL– x=90
+    gfx_->fillCircle(MS_VOLDOWN_X, MS_VOL_Y, MS_STOP_R, PANEL_2);
+    gfx_->drawCircle(MS_VOLDOWN_X, MS_VOL_Y, MS_STOP_R, BORDER);
+    gfx_->drawLine(MS_VOLDOWN_X - 9, MS_VOL_Y, MS_VOLDOWN_X + 9, MS_VOL_Y, TEXT);
+
+    // STOP x=180 (roter Kreis mit Quadrat)
     gfx_->fillCircle(MS_STOP_X, MS_STOP_Y, MS_STOP_R, PANEL_2);
     gfx_->drawCircle(MS_STOP_X, MS_STOP_Y, MS_STOP_R, RED);
-    gfx_->fillRect(MS_STOP_X - 6, MS_STOP_Y - 6, 12, 12, RED);
+    gfx_->fillRect(MS_STOP_X - 8, MS_STOP_Y - 8, 16, 16, RED);
 
-    gfx_->fillCircle(MS_VOLDOWN_X, MS_VOL_Y, 18, PANEL_2);
-    gfx_->drawCircle(MS_VOLDOWN_X, MS_VOL_Y, 18, BORDER);
-    gfx_->drawLine(MS_VOLDOWN_X - 7, MS_VOL_Y, MS_VOLDOWN_X + 7, MS_VOL_Y, TEXT);
+    // VOL+ x=270
+    gfx_->fillCircle(MS_VOLUP_X, MS_VOL_Y, MS_STOP_R, PANEL_2);
+    gfx_->drawCircle(MS_VOLUP_X, MS_VOL_Y, MS_STOP_R, BORDER);
+    gfx_->drawLine(MS_VOLUP_X - 9, MS_VOL_Y, MS_VOLUP_X + 9, MS_VOL_Y, TEXT);
+    gfx_->drawLine(MS_VOLUP_X, MS_VOL_Y - 9, MS_VOLUP_X, MS_VOL_Y + 9, TEXT);
 
-    gfx_->fillCircle(MS_VOLUP_X, MS_VOL_Y, 18, PANEL_2);
-    gfx_->drawCircle(MS_VOLUP_X, MS_VOL_Y, 18, BORDER);
-    gfx_->drawLine(MS_VOLUP_X - 7, MS_VOL_Y, MS_VOLUP_X + 7, MS_VOL_Y, TEXT);
-    gfx_->drawLine(MS_VOLUP_X, MS_VOL_Y - 7, MS_VOLUP_X, MS_VOL_Y + 7, TEXT);
-
+    // Lautstaerke-Prozent unter den drei Buttons (y=315)
     const String vol = String(volumePercent_) + "%";
-    centeredFont(vol, MS_VOL_Y - 8, MUTED_TXT, u8g2_font_helvR10_tf);
+    centeredFont(vol, 315, MUTED_TXT, u8g2_font_helvR10_tf);
 }
 
 // ---------------------------------------------------------------------------
@@ -867,42 +857,46 @@ void Waveshare185CDisplay::renderMediaScreen() {
 // ---------------------------------------------------------------------------
 void Waveshare185CDisplay::renderMediaButtons() {
     if (!ready_ || !displayOn_) return;
-
     const uint16_t accent = CYAN;
 
-    // ── Prev ⏮ ──────────────────────────────────────────────────────────────
+    // PREV x=100 (groesser: R=34)
     gfx_->fillCircle(MS_PREV_X, MS_BTN_Y, MS_BTN_R, PANEL_2);
     gfx_->drawCircle(MS_PREV_X, MS_BTN_Y, MS_BTN_R, BORDER);
+    // zwei linksweisende Dreiecke
     for (int t = 0; t < 2; t++) {
-        const int ax = MS_PREV_X + 6 - t * 8;
-        gfx_->drawLine(ax,     MS_BTN_Y - 8, ax - 8, MS_BTN_Y,     MUTED_TXT);
-        gfx_->drawLine(ax - 8, MS_BTN_Y,     ax,     MS_BTN_Y + 8, MUTED_TXT);
-        gfx_->drawLine(ax,     MS_BTN_Y - 8, ax,     MS_BTN_Y + 8, MUTED_TXT);
+        const int ax = MS_PREV_X + 8 - t * 10;
+        gfx_->drawLine(ax,      MS_BTN_Y - 10, ax - 10, MS_BTN_Y,      MUTED_TXT);
+        gfx_->drawLine(ax - 10, MS_BTN_Y,      ax,      MS_BTN_Y + 10, MUTED_TXT);
+        gfx_->drawLine(ax,      MS_BTN_Y - 10, ax,      MS_BTN_Y + 10, MUTED_TXT);
     }
 
-    // ── Play/Pause ⏸/▶ (größer, Cyan-Ring) ──────────────────────────────────
+    // PLAY/PAUSE x=180 (R=34, doppelter Cyan-Ring)
     gfx_->fillCircle(MS_PLAY_X, MS_BTN_Y, MS_BTN_R, PANEL_2);
     gfx_->drawCircle(MS_PLAY_X, MS_BTN_Y, MS_BTN_R,     accent);
     gfx_->drawCircle(MS_PLAY_X, MS_BTN_Y, MS_BTN_R - 1, accent);
     if (media_.playing) {
-        gfx_->fillRect(MS_PLAY_X - 7, MS_BTN_Y - 8, 5, 16, accent);
-        gfx_->fillRect(MS_PLAY_X + 2, MS_BTN_Y - 8, 5, 16, accent);
+        // Pause: zwei breite Balken
+        gfx_->fillRect(MS_PLAY_X - 10, MS_BTN_Y - 11, 7, 22, accent);
+        gfx_->fillRect(MS_PLAY_X +  3, MS_BTN_Y - 11, 7, 22, accent);
     } else {
-        for (int i = 0; i < 10; i++) {
-            gfx_->drawLine(MS_PLAY_X - 5 + i, MS_BTN_Y - (9 - i),
-                           MS_PLAY_X - 5 + i, MS_BTN_Y + (9 - i), accent);
+        // Play: breites Dreieck
+        for (int i = 0; i < 14; i++) {
+            gfx_->drawLine(MS_PLAY_X - 6 + i, MS_BTN_Y - (13 - i),
+                           MS_PLAY_X - 6 + i, MS_BTN_Y + (13 - i), accent);
         }
     }
 
-    // ── Next ⏭ ──────────────────────────────────────────────────────────────
+    // NEXT x=260 (R=34)
     gfx_->fillCircle(MS_NEXT_X, MS_BTN_Y, MS_BTN_R, PANEL_2);
     gfx_->drawCircle(MS_NEXT_X, MS_BTN_Y, MS_BTN_R, BORDER);
+    // zwei rechtsweisende Dreiecke
     for (int t = 0; t < 2; t++) {
-        const int ax = MS_NEXT_X - 6 + t * 8;
-        gfx_->drawLine(ax,     MS_BTN_Y - 8, ax + 8, MS_BTN_Y,     MUTED_TXT);
-        gfx_->drawLine(ax + 8, MS_BTN_Y,     ax,     MS_BTN_Y + 8, MUTED_TXT);
-        gfx_->drawLine(ax,     MS_BTN_Y - 8, ax,     MS_BTN_Y + 8, MUTED_TXT);
+        const int ax = MS_NEXT_X - 8 + t * 10;
+        gfx_->drawLine(ax,      MS_BTN_Y - 10, ax + 10, MS_BTN_Y,      MUTED_TXT);
+        gfx_->drawLine(ax + 10, MS_BTN_Y,      ax,      MS_BTN_Y + 10, MUTED_TXT);
+        gfx_->drawLine(ax,      MS_BTN_Y - 10, ax,      MS_BTN_Y + 10, MUTED_TXT);
     }
+}
 }
 
 // ---------------------------------------------------------------------------
