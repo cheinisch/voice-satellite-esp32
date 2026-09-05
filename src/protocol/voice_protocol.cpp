@@ -2,7 +2,6 @@
 #include "build_info.h"
 #include "voice_satellite_config.h"
 #include "voice_satellite_media_playback.h"
-#include "waveshare_185c_board.h"
 #include <ArduinoJson.h>
 #include <cstring>
 
@@ -72,10 +71,8 @@ void VoiceProtocol::loop() {
 
         // Poll media touch controls from the board and send commands to Core.
         if (board_) {
-            auto* wb = static_cast<Waveshare185CBoard*>(board_);
-
             // Core erwartet {"type":"media.control","action":"<action>"}.
-            // "toggle" wird vom Core selbst zu pause/resume aufgelöst.
+            // consumeMedia* sind virtuelle Board-Methoden — kein board-spezifischer Cast nötig.
             auto sendMediaControl = [&](const char* action, int step = 0) {
                 JsonDocument cmd;
                 cmd["type"]   = "media.control";
@@ -87,10 +84,10 @@ void VoiceProtocol::loop() {
                               action, step, out.c_str());
             };
 
-            if (wb->consumeMediaPlayPause()) { Serial.println("[WS] consume: PLAY/PAUSE"); sendMediaControl("toggle"); }
-            if (wb->consumeMediaPrev())      { Serial.println("[WS] consume: PREV (→ volume_down)"); sendMediaControl("volume_down", 10); }
-            if (wb->consumeMediaNext())      { Serial.println("[WS] consume: NEXT (→ volume_up)");   sendMediaControl("volume_up",   10); }
-            if (wb->consumeMediaStop())      { Serial.println("[WS] consume: STOP"); sendMediaControl("stop"); }
+            if (board_->consumeMediaPlayPause()) { Serial.println("[WS] consume: PLAY/PAUSE"); sendMediaControl("toggle"); }
+            if (board_->consumeMediaPrev())      { Serial.println("[WS] consume: PREV (→ volume_down)"); sendMediaControl("volume_down", 10); }
+            if (board_->consumeMediaNext())      { Serial.println("[WS] consume: NEXT (→ volume_up)");   sendMediaControl("volume_up",   10); }
+            if (board_->consumeMediaStop())      { Serial.println("[WS] consume: STOP"); sendMediaControl("stop"); }
         }
     }
 }
@@ -186,6 +183,10 @@ void VoiceProtocol::sendHello() {
     String out;
     serializeJson(doc, out);
     sendJson(out);
+    Serial.printf("[REG] hello gesendet: satellite_id=%s\n",
+                  doc["satellite_id"].as<const char*>() ? doc["satellite_id"].as<const char*>() : "(leer)");
+    const bool mediaInHello = doc["media"]["enabled"] | false;
+    Serial.printf("[REG] media.enabled in hello: %s\n", mediaInHello ? "JA" : "NEIN");
 }
 
 void VoiceProtocol::updateTtsFormat(JsonDocument& doc) {
@@ -246,7 +247,12 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
 
     if (!strcmp(type, "client.capabilities.accepted")) {
         const bool mediaAccepted = doc["media"] | false;
-        Serial.printf("Media Capability: %s\n", mediaAccepted ? "akzeptiert" : "nicht aktiv");
+        const char* clientId = doc["client_id"] | "(kein)";
+        Serial.printf("[REG] client.capabilities.accepted: media=%s client_id=%s\n",
+                      mediaAccepted ? "JA" : "NEIN", clientId);
+        if (!mediaAccepted) {
+            Serial.println("[REG] WARNUNG: Core hat Media NICHT akzeptiert! media.control wird fehlschlagen.");
+        }
         return;
     }
 
@@ -348,8 +354,18 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
 
     if (!strcmp(type, "error")) {
         String message = firstString(doc, "message", "detail");
+        const char* code = doc["code"] | "";
         if (!message.length()) message = "Unbekannter Fehler";
-        Serial.printf("Core Fehler: %s\n", message.c_str());
+        Serial.printf("[ERR] Core Fehler: code=%s message=%s\n", code, message.c_str());
+        // Media-Control-Fehler nicht als Voice-Error weiterleiten —
+        // sonst unterbricht jarvisMediaInterruptForVoice() die Musik.
+        if (strncmp(code, "media_", 6) == 0 ||
+            strstr(message.c_str(), "media.control") ||
+            strstr(message.c_str(), "media_") ||
+            strstr(message.c_str(), "Media")) {
+            Serial.println("[ERR] Media-Fehler ignoriert (kein Voice-Error).");
+            return;
+        }
         emit(VoiceEvent::Error, message);
         return;
     }

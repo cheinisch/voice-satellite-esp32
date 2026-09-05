@@ -61,4 +61,10 @@ public:
 
     // Optional media overlay — headless boards provide a no-op default.
     virtual void showMedia(const MediaInfo& info) { (void)info; }
+
+    // Media touch controls — boards without a display return false.
+    virtual bool consumeMediaPlayPause() { return false; }
+    virtual bool consumeMediaPrev()       { return false; }
+    virtual bool consumeMediaNext()       { return false; }
+    virtual bool consumeMediaStop()       { return false; }
 };
