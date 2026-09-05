@@ -897,7 +897,7 @@ void Waveshare185CDisplay::renderMediaButtons() {
         gfx_->drawLine(ax,      MS_BTN_Y - 10, ax,      MS_BTN_Y + 10, MUTED_TXT);
     }
 }
-}
+
 
 // ---------------------------------------------------------------------------
 // showMedia — öffentliche API
