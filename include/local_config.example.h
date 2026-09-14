@@ -60,6 +60,20 @@
 //   "high"   -> Core quality=high
 #define VOICE_SATELLITE_TTS_QUALITY      "low"
 
+// TTS-Ausgabeformat, das der ESP dem Core als abspielbar meldet. Der aktuelle
+// AudioIO-Pfad erwartet PCM16/16 kHz/Mono. Provider wie Kokoro dürfen intern
+// andere Formate liefern; der Core konvertiert vor dem Versand an den ESP.
+#define VOICE_SATELLITE_TTS_OUTPUT_CONTAINER        "wav"
+#define VOICE_SATELLITE_TTS_OUTPUT_FORMAT           "pcm_s16le"
+#define VOICE_SATELLITE_TTS_OUTPUT_SAMPLE_RATE      16000
+#define VOICE_SATELLITE_TTS_OUTPUT_CHANNELS         1
+#define VOICE_SATELLITE_TTS_OUTPUT_BITS_PER_SAMPLE  16
+
+// WebSocket-Grenzen für eingehendes TTS-Audio. Diese Werte werden bei der
+// Registrierung an den Core übermittelt und auch für session.start verwendet.
+#define VOICE_SATELLITE_MAX_BINARY_FRAME_BYTES      (14U * 1024U)
+#define VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES   (12U * 1024U)
+
 // Optional: Lautstärke für das Waveshare-Audioprofil (0..100).
 #define VOICE_SATELLITE_WAVESHARE_SPEAKER_VOLUME 70
 #define VOICE_SATELLITE_WAVESHARE_MIC_GAIN       70

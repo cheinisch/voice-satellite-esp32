@@ -124,6 +124,35 @@
 #define VOICE_SATELLITE_TTS_QUALITY "low"
 #endif
 
+// TTS playback contract advertised to Jarvis Core. The protocol-level speaker
+// path consumes PCM16 mono. Board drivers may convert this internally to their
+// native codec/I2S format (for example Satellite1.1 converts 16 kHz mono to
+// 48 kHz stereo/32-bit). Keep these values aligned with AudioIO::writePcm16().
+#ifndef VOICE_SATELLITE_TTS_OUTPUT_CONTAINER
+#define VOICE_SATELLITE_TTS_OUTPUT_CONTAINER "wav"
+#endif
+#ifndef VOICE_SATELLITE_TTS_OUTPUT_FORMAT
+#define VOICE_SATELLITE_TTS_OUTPUT_FORMAT "pcm_s16le"
+#endif
+#ifndef VOICE_SATELLITE_TTS_OUTPUT_SAMPLE_RATE
+#define VOICE_SATELLITE_TTS_OUTPUT_SAMPLE_RATE VOICE_SATELLITE_AUDIO_RATE
+#endif
+#ifndef VOICE_SATELLITE_TTS_OUTPUT_CHANNELS
+#define VOICE_SATELLITE_TTS_OUTPUT_CHANNELS 1
+#endif
+#ifndef VOICE_SATELLITE_TTS_OUTPUT_BITS_PER_SAMPLE
+#define VOICE_SATELLITE_TTS_OUTPUT_BITS_PER_SAMPLE 16
+#endif
+
+// arduinoWebSockets uses a 15 KiB receive limit in the stock ESP32 setup.
+// Stay below that limit and explicitly tell the Core how it should chunk TTS.
+#ifndef VOICE_SATELLITE_MAX_BINARY_FRAME_BYTES
+#define VOICE_SATELLITE_MAX_BINARY_FRAME_BYTES (14U * 1024U)
+#endif
+#ifndef VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES
+#define VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES (12U * 1024U)
+#endif
+
 
 // Display rotation for boards with a screen. Both degree values and legacy
 // Arduino_GFX indices are accepted:

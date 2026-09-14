@@ -46,6 +46,41 @@ const char* normalizedTtsQuality() {
     );
     return "low";
 }
+
+void augmentTtsOutputCapabilities(JsonDocument& doc) {
+    const uint32_t maxFrame = static_cast<uint32_t>(VOICE_SATELLITE_MAX_BINARY_FRAME_BYTES);
+    const uint32_t preferredChunk = static_cast<uint32_t>(VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES);
+
+    // Keep both the legacy top-level hints and audio-scoped hints. Current Core
+    // versions understand both; older streaming Core versions use top-level.
+    doc["client_max_binary_frame_bytes"] = maxFrame;
+    doc["preferred_tts_chunk_bytes"] = preferredChunk;
+
+    JsonObject audio = doc["audio"].as<JsonObject>();
+    if (!audio.isNull()) {
+        audio["max_binary_frame_bytes"] = maxFrame;
+        audio["preferred_tts_chunk_bytes"] = preferredChunk;
+    }
+
+    JsonObject output = doc["tts_output"].to<JsonObject>();
+    JsonArray containers = output["containers"].to<JsonArray>();
+    containers.add(VOICE_SATELLITE_TTS_OUTPUT_CONTAINER);
+    JsonArray formats = output["sample_formats"].to<JsonArray>();
+    formats.add(VOICE_SATELLITE_TTS_OUTPUT_FORMAT);
+    JsonArray rates = output["sample_rates"].to<JsonArray>();
+    rates.add(static_cast<uint32_t>(VOICE_SATELLITE_TTS_OUTPUT_SAMPLE_RATE));
+    JsonArray channels = output["channels"].to<JsonArray>();
+    channels.add(static_cast<uint8_t>(VOICE_SATELLITE_TTS_OUTPUT_CHANNELS));
+    JsonArray bits = output["bits_per_sample"].to<JsonArray>();
+    bits.add(static_cast<uint8_t>(VOICE_SATELLITE_TTS_OUTPUT_BITS_PER_SAMPLE));
+
+    JsonObject preferred = output["preferred"].to<JsonObject>();
+    preferred["container"] = VOICE_SATELLITE_TTS_OUTPUT_CONTAINER;
+    preferred["sample_format"] = VOICE_SATELLITE_TTS_OUTPUT_FORMAT;
+    preferred["sample_rate"] = static_cast<uint32_t>(VOICE_SATELLITE_TTS_OUTPUT_SAMPLE_RATE);
+    preferred["channels"] = static_cast<uint8_t>(VOICE_SATELLITE_TTS_OUTPUT_CHANNELS);
+    preferred["bits_per_sample"] = static_cast<uint8_t>(VOICE_SATELLITE_TTS_OUTPUT_BITS_PER_SAMPLE);
+}
 }
 
 void VoiceProtocol::begin(Board& board) {
@@ -199,6 +234,9 @@ void VoiceProtocol::sendHello() {
     audio["format"] = "pcm_s16le";
     audio["sample_rate"] = VOICE_SATELLITE_AUDIO_RATE;
     audio["channels"] = VOICE_SATELLITE_AUDIO_CHANNELS;
+    audio["bits_per_sample"] = 16;
+
+    augmentTtsOutputCapabilities(doc);
 
     // Adds top-level features.media + media.formats/controls. The Core accepts
     // these fields on the existing hello message and registers this connection
@@ -212,6 +250,16 @@ void VoiceProtocol::sendHello() {
                   doc["satellite_id"].as<const char*>() ? doc["satellite_id"].as<const char*>() : "(leer)");
     const bool mediaInHello = doc["media"]["enabled"] | false;
     Serial.printf("[REG] media.enabled in hello: %s\n", mediaInHello ? "JA" : "NEIN");
+    Serial.printf(
+        "[REG] TTS-Ausgabe: %s/%s %lu Hz %u ch %u Bit, Frame<=%lu, Chunk=%lu\n",
+        VOICE_SATELLITE_TTS_OUTPUT_CONTAINER,
+        VOICE_SATELLITE_TTS_OUTPUT_FORMAT,
+        static_cast<unsigned long>(VOICE_SATELLITE_TTS_OUTPUT_SAMPLE_RATE),
+        static_cast<unsigned>(VOICE_SATELLITE_TTS_OUTPUT_CHANNELS),
+        static_cast<unsigned>(VOICE_SATELLITE_TTS_OUTPUT_BITS_PER_SAMPLE),
+        static_cast<unsigned long>(VOICE_SATELLITE_MAX_BINARY_FRAME_BYTES),
+        static_cast<unsigned long>(VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES)
+    );
 }
 
 void VoiceProtocol::sendClientInfo() {
@@ -247,6 +295,9 @@ void VoiceProtocol::sendClientInfo() {
     audio["format"] = "pcm_s16le";
     audio["sample_rate"] = VOICE_SATELLITE_AUDIO_RATE;
     audio["channels"] = VOICE_SATELLITE_AUDIO_CHANNELS;
+    audio["bits_per_sample"] = 16;
+
+    augmentTtsOutputCapabilities(doc);
 
     // Advertise media support in the same registration message.
     jarvisMediaAugmentCapabilities(doc);
@@ -261,6 +312,16 @@ void VoiceProtocol::sendClientInfo() {
         hardwareId_.length() ? hardwareId_.c_str() : "(fehlt)",
         VOICE_SATELLITE_ID,
         board_ ? board_->model() : "(unbekannt)"
+    );
+    Serial.printf(
+        "[REG] TTS-Ausgabe: %s/%s %lu Hz %u ch %u Bit, Frame<=%lu, Chunk=%lu\n",
+        VOICE_SATELLITE_TTS_OUTPUT_CONTAINER,
+        VOICE_SATELLITE_TTS_OUTPUT_FORMAT,
+        static_cast<unsigned long>(VOICE_SATELLITE_TTS_OUTPUT_SAMPLE_RATE),
+        static_cast<unsigned>(VOICE_SATELLITE_TTS_OUTPUT_CHANNELS),
+        static_cast<unsigned>(VOICE_SATELLITE_TTS_OUTPUT_BITS_PER_SAMPLE),
+        static_cast<unsigned long>(VOICE_SATELLITE_MAX_BINARY_FRAME_BYTES),
+        static_cast<unsigned long>(VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES)
     );
 }
 
@@ -516,21 +577,21 @@ void VoiceProtocol::sendSessionStart(bool autoTts) {
     JsonObject tts = doc["tts"].to<JsonObject>();
     tts["stream"] = true;
     tts["quality"] = ttsQuality;
-    tts["chunk_bytes"] = 12U * 1024U;
+    tts["chunk_bytes"] = static_cast<uint32_t>(VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES);
     tts["ack"] = true;
     tts["ack_timeout_ms"] = 8000U;
 
     // Keep frames below arduinoWebSockets' stock ESP32 receive limit (15 KiB).
     // Older Core versions ignore these hints; streaming-capable Core versions
     // use them to split TTS audio into ESP-friendly chunks.
-    doc["client_max_binary_frame_bytes"] = 14U * 1024U;
-    doc["preferred_tts_chunk_bytes"] = 12U * 1024U;
+    doc["client_max_binary_frame_bytes"] = static_cast<uint32_t>(VOICE_SATELLITE_MAX_BINARY_FRAME_BYTES);
+    doc["preferred_tts_chunk_bytes"] = static_cast<uint32_t>(VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES);
 
     Serial.printf(
         "TTS Profil: %s (Core quality=%s, Streaming=ja, ACK=ja, Chunk=%u Bytes)\n",
         VOICE_SATELLITE_TTS_QUALITY,
         ttsQuality,
-        12U * 1024U
+        static_cast<unsigned>(VOICE_SATELLITE_PREFERRED_TTS_CHUNK_BYTES)
     );
 
     String out;

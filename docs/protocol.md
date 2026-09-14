@@ -25,6 +25,30 @@ Der ESP32 verwendet denselben Voice-WebSocket-Vertrag wie der Linux-/ReSpeaker-S
     "board": "Waveshare ESP32-S3-Touch-LCD-1.85C V2",
     "version": "1.0.0",
     "build": 1
+  },
+  "audio": {
+    "format": "pcm_s16le",
+    "sample_rate": 16000,
+    "channels": 1,
+    "bits_per_sample": 16,
+    "max_binary_frame_bytes": 14336,
+    "preferred_tts_chunk_bytes": 12288
+  },
+  "client_max_binary_frame_bytes": 14336,
+  "preferred_tts_chunk_bytes": 12288,
+  "tts_output": {
+    "containers": ["wav"],
+    "sample_formats": ["pcm_s16le"],
+    "sample_rates": [16000],
+    "channels": [1],
+    "bits_per_sample": [16],
+    "preferred": {
+      "container": "wav",
+      "sample_format": "pcm_s16le",
+      "sample_rate": 16000,
+      "channels": 1,
+      "bits_per_sample": 16
+    }
   }
 }
 ```
@@ -32,6 +56,13 @@ Der ESP32 verwendet denselben Voice-WebSocket-Vertrag wie der Linux-/ReSpeaker-S
 `client.id` und `client.name` sind nur Diagnoseinformationen. Die dauerhafte
 Identität ist ausschließlich `client.hardware_id`. Sie wird aus der
 werksseitigen eFuse/Base-MAC gelesen und bleibt bei Reconnects identisch.
+
+`tts_output` beschreibt ausschließlich das Format, das der Satellite für die
+Wiedergabe vom Core erwartet. Provider dürfen andere Formate erzeugen. Der Core
+normalisiert diese vor der Übertragung auf das bevorzugte Format. Beim aktuellen
+ESP32-Protokollpfad ist das `wav` mit PCM16, 16 kHz, mono und 16 Bit. Die
+Frame-/Chunk-Werte werden sowohl top-level als auch im `audio`-Block gesendet,
+damit neue und ältere Core-Versionen denselben Streaming-Vertrag nutzen können.
 
 `session.start`:
 
