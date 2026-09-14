@@ -27,8 +27,18 @@
 #define VOICE_SATELLITE_CORE_TOKEN ""
 #endif
 
+// Legacy local_config.h aliases used by earlier ESP32 builds.
+#if !defined(VOICE_SATELLITE_ID) && defined(VOICE_SATELLITE_SATELLITE_ID)
+#define VOICE_SATELLITE_ID VOICE_SATELLITE_SATELLITE_ID
+#endif
+#if !defined(VOICE_SATELLITE_NAME) && defined(VOICE_SATELLITE_SATELLITE_NAME)
+#define VOICE_SATELLITE_NAME VOICE_SATELLITE_SATELLITE_NAME
+#endif
+
+// These values are client diagnostics only. Persistent registration uses the
+// factory eFuse/Base-MAC and the display name is owned by Jarvis Core.
 #ifndef VOICE_SATELLITE_ID
-#define VOICE_SATELLITE_ID "satellite-esp32-01"
+#define VOICE_SATELLITE_ID "esp32-satellite"
 #endif
 #ifndef VOICE_SATELLITE_NAME
 #define VOICE_SATELLITE_NAME "ESP32 Satellite"

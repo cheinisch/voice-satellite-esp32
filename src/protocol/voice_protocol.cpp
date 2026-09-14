@@ -4,6 +4,7 @@
 #include "voice_satellite_media_playback.h"
 #include <ArduinoJson.h>
 #include <cstring>
+#include <esp_mac.h>
 
 namespace {
 const char* firstString(JsonDocument& doc, const char* a, const char* b) {
@@ -11,6 +12,22 @@ const char* firstString(JsonDocument& doc, const char* a, const char* b) {
     if (value && *value) return value;
     value = doc[b].as<const char*>();
     return value ? value : "";
+}
+
+String readEfuseHardwareId() {
+    uint8_t mac[6] = {0};
+    if (esp_efuse_mac_get_default(mac) != ESP_OK) {
+        return String();
+    }
+
+    char value[18];
+    snprintf(
+        value,
+        sizeof(value),
+        "%02x:%02x:%02x:%02x:%02x:%02x",
+        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+    );
+    return String(value);
 }
 
 const char* normalizedTtsQuality() {
@@ -33,6 +50,12 @@ const char* normalizedTtsQuality() {
 
 void VoiceProtocol::begin(Board& board) {
     board_ = &board;
+    hardwareId_ = readEfuseHardwareId();
+    if (hardwareId_.length()) {
+        Serial.printf("[REG] Hardware-ID (eFuse/Base-MAC): %s\n", hardwareId_.c_str());
+    } else {
+        Serial.println("[REG] FEHLER: eFuse/Base-MAC konnte nicht gelesen werden.");
+    }
 
     // ESP32 clients can send an Authorization header during the HTTP WebSocket
     // upgrade. Keep the token out of the protocol payload and out of logs.
@@ -101,18 +124,19 @@ void VoiceProtocol::onEvent(WStype_t type, uint8_t* payload, size_t length) {
         case WStype_CONNECTED:
             connected_ = true;
             ready_ = false;
+            clientInfoSent_ = false;
             Serial.printf("Core verbunden: %s:%d%s\n", VOICE_SATELLITE_CORE_HOST, VOICE_SATELLITE_CORE_PORT, VOICE_SATELLITE_CORE_PATH);
             emit(VoiceEvent::Connected);
 #if VOICE_SATELLITE_SEND_HELLO
-            sendHello();
-#elif defined(JARVIS_MEDIA_PLAYBACK) && JARVIS_MEDIA_PLAYBACK
-            // Media outputs must advertise themselves to the Core.
+            // Legacy compatibility only. The current Core registration happens
+            // with client.info after the ready event.
             sendHello();
 #endif
             break;
         case WStype_DISCONNECTED:
             connected_ = false;
             ready_ = false;
+            clientInfoSent_ = false;
             binaryFragmentActive_ = false;
             Serial.println("Core getrennt; Reconnect läuft ...");
             emit(VoiceEvent::Disconnected);
@@ -152,6 +176,7 @@ void VoiceProtocol::sendHello() {
     doc["client_build"] = VOICE_SATELLITE_BUILD;
     doc["satellite_id"] = VOICE_SATELLITE_ID;
     doc["satellite_name"] = VOICE_SATELLITE_NAME;
+    if (hardwareId_.length()) doc["hardware_id"] = hardwareId_;
     doc["transport"] = "websocket";
     doc["platform"] = "esp32";
 
@@ -187,6 +212,56 @@ void VoiceProtocol::sendHello() {
                   doc["satellite_id"].as<const char*>() ? doc["satellite_id"].as<const char*>() : "(leer)");
     const bool mediaInHello = doc["media"]["enabled"] | false;
     Serial.printf("[REG] media.enabled in hello: %s\n", mediaInHello ? "JA" : "NEIN");
+}
+
+void VoiceProtocol::sendClientInfo() {
+    if (!connected_ || clientInfoSent_) return;
+
+    JsonDocument doc;
+    doc["type"] = "client.info";
+
+    JsonObject client = doc["client"].to<JsonObject>();
+    if (hardwareId_.length()) client["hardware_id"] = hardwareId_;
+    client["id"] = VOICE_SATELLITE_ID;
+    client["name"] = VOICE_SATELLITE_NAME;  // diagnostic only; Core owns display name
+    client["platform"] = "esp32";
+    client["version"] = VOICE_SATELLITE_VERSION;
+    client["build"] = VOICE_SATELLITE_BUILD;
+
+    if (board_) {
+        client["board"] = board_->model();
+        client["board_profile"] = board_->profile();
+
+        const BoardCapabilities caps = board_->capabilities();
+        JsonObject capabilities = doc["capabilities"].to<JsonObject>();
+        capabilities["microphone"] = caps.microphone;
+        capabilities["speaker"] = caps.speaker;
+        capabilities["display"] = caps.display;
+        capabilities["touch"] = caps.touch;
+        capabilities["buttons"] = caps.buttons;
+        capabilities["psram"] = caps.psram;
+        capabilities["sdcard"] = caps.sdcard;
+    }
+
+    JsonObject audio = doc["audio"].to<JsonObject>();
+    audio["format"] = "pcm_s16le";
+    audio["sample_rate"] = VOICE_SATELLITE_AUDIO_RATE;
+    audio["channels"] = VOICE_SATELLITE_AUDIO_CHANNELS;
+
+    // Advertise media support in the same registration message.
+    jarvisMediaAugmentCapabilities(doc);
+
+    String out;
+    serializeJson(doc, out);
+    sendJson(out);
+    clientInfoSent_ = true;
+
+    Serial.printf(
+        "[REG] client.info gesendet: hardware_id=%s client_id=%s board=%s\n",
+        hardwareId_.length() ? hardwareId_.c_str() : "(fehlt)",
+        VOICE_SATELLITE_ID,
+        board_ ? board_->model() : "(unbekannt)"
+    );
 }
 
 void VoiceProtocol::updateTtsFormat(JsonDocument& doc) {
@@ -245,11 +320,52 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
 
     const char* type = doc["type"] | "";
 
+    if (!strcmp(type, "satellite.config")) {
+        const char* hardwareId = doc["hardware_id"] | "";
+        const char* coreName = doc["name"] | "";
+        if ((!coreName || !*coreName) && !doc["config"].isNull()) {
+            coreName = doc["config"]["name"] | "";
+        }
+
+        if (hardwareId && *hardwareId) {
+            Serial.printf("[REG] Core registriert Hardware-ID: %s\n", hardwareId);
+        }
+        if (coreName && *coreName) {
+            satelliteName_ = String(coreName);
+            satelliteName_.trim();
+            if (satelliteName_.length() && board_) {
+                board_->setDisplayName(satelliteName_);
+            }
+            Serial.printf("[REG] Core-Name: %s\n", satelliteName_.c_str());
+        }
+        return;
+    }
+
+    if (!strcmp(type, "satellite.identity.required")) {
+        const char* detail = doc["detail"] | "Stabile hardware_id fehlt";
+        Serial.printf("[REG] Registrierung unvollständig: %s\n", detail);
+        return;
+    }
+
+    if (!strcmp(type, "satellite.identity.error")) {
+        const char* detail = doc["detail"] | "Hardware-ID wurde vom Core abgelehnt";
+        Serial.printf("[REG] Registrierungsfehler: %s\n", detail);
+        return;
+    }
+
     if (!strcmp(type, "client.capabilities.accepted")) {
         const bool mediaAccepted = doc["media"] | false;
         const char* clientId = doc["client_id"] | "(kein)";
-        Serial.printf("[REG] client.capabilities.accepted: media=%s client_id=%s\n",
-                      mediaAccepted ? "JA" : "NEIN", clientId);
+        const char* acceptedHardwareId = doc["hardware_id"] | "";
+        const char* acceptedName = doc["name"] | "";
+        Serial.printf("[REG] client.capabilities.accepted: media=%s client_id=%s hardware_id=%s\n",
+                      mediaAccepted ? "JA" : "NEIN", clientId,
+                      (acceptedHardwareId && *acceptedHardwareId) ? acceptedHardwareId : "(fehlt)");
+        if (acceptedName && *acceptedName) {
+            satelliteName_ = String(acceptedName);
+            satelliteName_.trim();
+            if (satelliteName_.length() && board_) board_->setDisplayName(satelliteName_);
+        }
         if (!mediaAccepted) {
             Serial.println("[REG] WARNUNG: Core hat Media NICHT akzeptiert! media.control wird fehlschlagen.");
         }
@@ -271,9 +387,12 @@ void VoiceProtocol::handleText(const uint8_t* payload, size_t length) {
         }
 
         const String detail = String(VOICE_SATELLITE_PROTOCOL_NAME);
+        if (!clientInfoSent_) {
+            sendClientInfo();
+        }
         if (!wasReady) {
             Serial.printf("Core bereit: %s\n", detail.c_str());
-            Serial.printf("Voice Satellite Anzeigename: %s\n", displayName_.c_str());
+            Serial.printf("Assistant-Anzeigename: %s\n", displayName_.c_str());
             emit(VoiceEvent::Ready, detail);
         }
 

@@ -5,10 +5,33 @@ Der ESP32 verwendet denselben Voice-WebSocket-Vertrag wie der Linux-/ReSpeaker-S
 ## Client → Core
 
 1. WebSocket-Verbindung zu `/api/v1/voice/live`
-2. `hello` JSON für Client-/Versionsinformationen
-3. `session.start` JSON
-4. eine binäre WAV-Nachricht (`audio/wav`, PCM16, 16 kHz, mono)
-5. `audio.commit` JSON
+2. Core sendet `ready`
+3. ESP32 sendet `client.info` mit stabiler `hardware_id` aus der eFuse/Base-MAC
+4. Core antwortet mit `satellite.config` und dem Core-verwalteten Gerätenamen
+5. `session.start` JSON
+6. eine binäre WAV-Nachricht (`audio/wav`, PCM16, 16 kHz, mono)
+7. `audio.commit` JSON
+
+`client.info`:
+
+```json
+{
+  "type": "client.info",
+  "client": {
+    "hardware_id": "34:85:18:ab:cd:ef",
+    "id": "esp32-satellite",
+    "name": "ESP32 Satellite",
+    "platform": "esp32",
+    "board": "Waveshare ESP32-S3-Touch-LCD-1.85C V2",
+    "version": "1.0.0",
+    "build": 1
+  }
+}
+```
+
+`client.id` und `client.name` sind nur Diagnoseinformationen. Die dauerhafte
+Identität ist ausschließlich `client.hardware_id`. Sie wird aus der
+werksseitigen eFuse/Base-MAC gelesen und bleibt bei Reconnects identisch.
 
 `session.start`:
 
@@ -38,6 +61,25 @@ Primäre `voice.satellite.v1`-Events:
 - `error`
 
 Zur Abwärtskompatibilität akzeptiert der ESP32 zusätzlich ältere Aliasnamen für Transkript-/Assistant-/TTS-Ereignisse.
+
+
+## Registrierung / Core-Name
+
+Nach erfolgreicher Registrierung sendet der Core beispielsweise:
+
+```json
+{
+  "type": "satellite.config",
+  "hardware_id": "34:85:18:ab:cd:ef",
+  "name": "Wohnzimmer",
+  "config": {"name": "Wohnzimmer"}
+}
+```
+
+Der ESP32 übernimmt diesen Namen für die lokale Anzeige. Eine Umbenennung im
+Command Center wird über dieselbe Nachricht ohne Neustart auf den verbundenen
+ESP32 gepusht. Fehlt die Hardware-ID, kann der Core `satellite.identity.required`
+senden; Registrierungsfehler werden als `satellite.identity.error` gemeldet.
 
 ## Authentifizierung
 

@@ -15,8 +15,11 @@
 // Authorization: Bearer <token>
 #define VOICE_SATELLITE_CORE_TOKEN       "jv_DEIN_TOKEN"
 
-#define VOICE_SATELLITE_ID     "satellite-livingroom"
-#define VOICE_SATELLITE_NAME   "Wohnzimmer"
+// Nur Diagnosewerte. Die dauerhafte Registrierung erfolgt automatisch über
+// die werksseitige eFuse/Base-MAC. Den sichtbaren Gerätenamen verwaltet der
+// Jarvis Core unter Einstellungen -> Voice Satelliten und pusht ihn zurück.
+#define VOICE_SATELLITE_ID     "esp32-satellite"
+#define VOICE_SATELLITE_NAME   "ESP32 Satellite"
 
 // Maximale Aufnahmedauer. Bei aktivierter Silence-Erkennung kann eine
 // Aufnahme vorher automatisch beendet werden.

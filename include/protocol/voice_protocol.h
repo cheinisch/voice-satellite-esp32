@@ -28,6 +28,8 @@ public:
     bool connected() const { return connected_; }
     bool ready() const { return ready_; }
     const String& displayName() const { return displayName_; }
+    const String& satelliteName() const { return satelliteName_; }
+    const String& hardwareId() const { return hardwareId_; }
 
     void sendSessionStart(bool autoTts);
     bool sendWav(const uint8_t* data, size_t length);
@@ -51,6 +53,9 @@ private:
     bool connected_ = false;
     bool ready_ = false;
     String displayName_ = "Voice Satellite";
+    String satelliteName_ = "Voice Satellite";
+    String hardwareId_;
+    bool clientInfoSent_ = false;
     bool binaryFragmentActive_ = false;
     Board* board_ = nullptr;
     bool mediaPlayPaused_ = false;  // lokaler Toggle-State für pause/resume
@@ -65,6 +70,7 @@ private:
 
     void onEvent(WStype_t type, uint8_t* payload, size_t length);
     void sendHello();
+    void sendClientInfo();
     void handleText(const uint8_t* payload, size_t length);
     void sendJson(const String& json);
     void emit(VoiceEvent event, const String& text = String());
